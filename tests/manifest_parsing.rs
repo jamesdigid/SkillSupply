@@ -1,5 +1,5 @@
-use epistem::manifest::ManifestParser;
-use epistem::manifest::YamlManifestParser;
+use skillsupport::manifest::ManifestParser;
+use skillsupport::manifest::YamlManifestParser;
 
 #[test]
 fn parses_manifest() {

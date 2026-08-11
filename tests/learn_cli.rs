@@ -14,14 +14,14 @@ fn cli_learns_a_provider_and_records_it() {
     let tempdir = tempdir().expect("temp dir");
     let registry = registry_root();
 
-    Command::cargo_bin("epistem")
+    Command::cargo_bin("caps")
         .expect("binary")
         .current_dir(tempdir.path())
         .arg("init")
         .assert()
         .success();
 
-    Command::cargo_bin("epistem")
+    Command::cargo_bin("caps")
         .expect("binary")
         .current_dir(tempdir.path())
         .args([
@@ -34,7 +34,7 @@ fn cli_learns_a_provider_and_records_it() {
         .success()
         .stdout(contains("learned capability browser-attach"));
 
-    let workspace_manifest = tempdir.path().join("epistem.yaml");
+    let workspace_manifest = tempdir.path().join("skillsupport.yaml");
     let source = fs::read_to_string(workspace_manifest).expect("workspace manifest");
     assert!(source.contains("browser-attach"));
 }
@@ -44,7 +44,7 @@ fn cli_reports_verification_failures() {
     let tempdir = tempdir().expect("temp dir");
     let registry = registry_root();
 
-    Command::cargo_bin("epistem")
+    Command::cargo_bin("caps")
         .expect("binary")
         .current_dir(tempdir.path())
         .args([

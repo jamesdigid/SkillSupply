@@ -1,4 +1,4 @@
-use epistem::storage::{CapabilitySource, FilesystemCapabilityLoader};
+use skillsupport::storage::{CapabilitySource, FilesystemCapabilityLoader};
 
 #[test]
 fn loads_capability_from_disk() {

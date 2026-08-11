@@ -1,4 +1,4 @@
-use epistem::manifest::ManifestValidator;
+use skillsupport::manifest::ManifestValidator;
 use std::fs;
 use tempfile::tempdir;
 

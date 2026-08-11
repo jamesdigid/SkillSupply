@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 
-use crate::error::{EpistemError, Result};
+use crate::error::{Result, SkillSupportError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderScheme {
@@ -62,11 +62,11 @@ impl Display for ProviderRef {
 }
 
 impl FromStr for ProviderRef {
-    type Err = EpistemError;
+    type Err = SkillSupportError;
 
     fn from_str(value: &str) -> Result<Self> {
         let (scheme, remainder) = value.split_once(':').ok_or_else(|| {
-            EpistemError::Registry(format!("invalid provider reference: {value}"))
+            SkillSupportError::Registry(format!("invalid provider reference: {value}"))
         })?;
 
         let (location, reference) = match remainder.rsplit_once('@') {
@@ -81,7 +81,7 @@ impl FromStr for ProviderRef {
             "local" => ProviderScheme::Local,
             "file" => ProviderScheme::File,
             other => {
-                return Err(EpistemError::Registry(format!(
+                return Err(SkillSupportError::Registry(format!(
                     "unsupported provider scheme: {other}"
                 )));
             }
@@ -125,7 +125,7 @@ pub struct GitProviderFetcher;
 impl ProviderFetcher for GitProviderFetcher {
     fn fetch(&self, provider: &ProviderRef, destination: &Path) -> Result<PathBuf> {
         let url = provider.git_url().ok_or_else(|| {
-            EpistemError::Registry("provider is not a github reference".to_string())
+            SkillSupportError::Registry("provider is not a github reference".to_string())
         })?;
         let destination = destination.join(provider.slug());
         if destination.exists() {
@@ -140,7 +140,7 @@ impl ProviderFetcher for GitProviderFetcher {
             .arg(&destination)
             .status()?;
         if !status.success() {
-            return Err(EpistemError::Registry(format!(
+            return Err(SkillSupportError::Registry(format!(
                 "git clone failed for {provider}"
             )));
         }
@@ -153,7 +153,7 @@ impl ProviderFetcher for GitProviderFetcher {
                 .arg(reference)
                 .status()?;
             if !checkout.success() {
-                return Err(EpistemError::Registry(format!(
+                return Err(SkillSupportError::Registry(format!(
                     "git checkout failed for {provider}"
                 )));
             }

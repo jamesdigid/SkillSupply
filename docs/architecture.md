@@ -1,6 +1,6 @@
 # Architecture
 
-Epistem is organized around capabilities, not packages.
+SkillSupport is organized around capabilities, not packages.
 
 ## Core Model
 
@@ -14,14 +14,14 @@ Epistem is organized around capabilities, not packages.
 
 ```mermaid
 flowchart TD
-  learn["epistem learn browser-attach"] --> registry[Lookup registry entry]
+  learn["caps learn browser-attach"] --> registry[Lookup registry entry]
   registry --> candidates[Candidate providers]
   candidates --> manifest[Read provider capabilities.yaml]
   manifest --> select[Select compatible provider]
   select --> acquire[Acquire provider]
   acquire --> init[Initialize runtime]
   init --> verify[Run verification tests]
-  verify --> ready[Record capability in epistem.yaml]
+  verify --> ready[Record capability in skillsupport.yaml]
 ```
 
 ## Repository Layout
@@ -45,7 +45,7 @@ Runtime launch, readiness checks, and shutdown handling.
 Verification suite parsing and execution.
 
 ### `src/learn`
-The end-to-end orchestration pipeline for `epistem learn`.
+The end-to-end orchestration pipeline for `caps learn`.
 
 ### `src/cli`
 Command-line entry points for `init`, `validate`, `learn`, and graph inspection.

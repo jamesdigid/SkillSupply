@@ -20,7 +20,7 @@ struct ValidationRow {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "epistem",
+    name = "caps",
     about = "Open capability registry and capability manager for autonomous agents",
     version,
     propagate_version = true
@@ -102,9 +102,9 @@ fn init(target_dir: Option<PathBuf>) -> crate::error::Result<()> {
     let workspace_name = target_dir
         .file_name()
         .and_then(|value| value.to_str())
-        .unwrap_or("epistem-workspace");
+        .unwrap_or("skillsupport-workspace");
     let manifest_path = target_dir.join(WORKSPACE_FILENAME);
-    let workspace_doc_path = target_dir.join("EPISTEM.md");
+    let workspace_doc_path = target_dir.join("SKILLSUPPORT.md");
 
     let workspace = WorkspaceManifest {
         name: workspace_name.to_string(),
@@ -113,12 +113,12 @@ fn init(target_dir: Option<PathBuf>) -> crate::error::Result<()> {
     };
 
     let workspace_doc = concat!(
-        "# Epistem Workspace\n\n",
-        "This directory was initialized by `epistem init`.\n\n",
+        "# SkillSupport Workspace\n\n",
+        "This directory was initialized by `caps init`.\n\n",
         "Installed capabilities live under `capabilities/`.\n\n",
         "## Next Steps\n\n",
         "- Add installed capabilities under `capabilities/`.\n",
-        "- Use `epistem learn <capability>` to acquire a capability.\n"
+        "- Use `caps learn <capability>` to acquire a capability.\n"
     )
     .to_string();
 
@@ -379,7 +379,7 @@ mod tests {
 
     fn assert_scaffold(target_dir: &Path) {
         let manifest_path = target_dir.join(WORKSPACE_FILENAME);
-        let workspace_doc_path = target_dir.join("EPISTEM.md");
+        let workspace_doc_path = target_dir.join("SKILLSUPPORT.md");
         let capabilities_dir = target_dir.join("capabilities");
 
         assert!(manifest_path.exists());

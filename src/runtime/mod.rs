@@ -3,8 +3,14 @@ use std::net::TcpStream;
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
-use crate::error::{EpistemError, Result};
+use crate::error::{Result, SkillSupportError};
 use crate::manifest::models::{CapabilityManifest, ReadyProbe, RuntimeType};
+
+pub mod capabilities;
+pub mod config;
+pub mod lifecycle;
+pub mod services;
+pub mod transport;
 
 pub struct RuntimeSession {
     child: Option<Child>,
@@ -23,12 +29,12 @@ impl RuntimeSession {
 
     pub fn send_json(&mut self, value: &serde_json::Value) -> Result<serde_json::Value> {
         let Some(stdin) = self.stdin.as_mut() else {
-            return Err(EpistemError::Registry(
+            return Err(SkillSupportError::Registry(
                 "runtime session does not support stdin communication".to_string(),
             ));
         };
         let Some(stdout) = self.stdout.as_mut() else {
-            return Err(EpistemError::Registry(
+            return Err(SkillSupportError::Registry(
                 "runtime session does not support stdout communication".to_string(),
             ));
         };
@@ -39,7 +45,7 @@ impl RuntimeSession {
         let mut response = String::new();
         stdout.read_line(&mut response)?;
         if response.trim().is_empty() {
-            return Err(EpistemError::Registry(
+            return Err(SkillSupportError::Registry(
                 "provider returned an empty response".to_string(),
             ));
         }
@@ -55,7 +61,7 @@ impl RuntimeSession {
                 .current_dir(root)
                 .status()?;
             if !status.success() {
-                return Err(EpistemError::Registry(format!(
+                return Err(SkillSupportError::Registry(format!(
                     "shutdown command failed for {}",
                     manifest.name
                 )));
@@ -81,7 +87,7 @@ impl RuntimeController {
         }
 
         let command = manifest.runtime.initialize.as_deref().ok_or_else(|| {
-            EpistemError::Registry(format!(
+            SkillSupportError::Registry(format!(
                 "missing runtime initialize command for {}",
                 manifest.name
             ))
@@ -129,7 +135,7 @@ impl RuntimeController {
                 if status.success() {
                     Ok(())
                 } else {
-                    Err(EpistemError::Registry(format!(
+                    Err(SkillSupportError::Registry(format!(
                         "ready command failed for {}",
                         manifest.name
                     )))
@@ -137,10 +143,10 @@ impl RuntimeController {
             }
             ReadyProbe::Tcp { port } => TcpStream::connect(("127.0.0.1", *port))
                 .map(|_| ())
-                .map_err(EpistemError::from),
+                .map_err(SkillSupportError::from),
             ReadyProbe::StdioHandshake { expected } => {
                 let Some(stdout) = session.stdout.as_mut() else {
-                    return Err(EpistemError::Registry(
+                    return Err(SkillSupportError::Registry(
                         "stdio handshake requires captured stdout".to_string(),
                     ));
                 };
@@ -150,7 +156,7 @@ impl RuntimeController {
                 if line.trim() == expected.trim() {
                     Ok(())
                 } else {
-                    Err(EpistemError::Registry(format!(
+                    Err(SkillSupportError::Registry(format!(
                         "ready handshake mismatch for {}: expected {expected:?}, got {line:?}",
                         manifest.name
                     )))

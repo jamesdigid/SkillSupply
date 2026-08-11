@@ -1,26 +1,26 @@
-# Epistem
+# SkillSupport
 
-Epistem is an open capability registry for autonomous agents.
+SkillSupport is an open capability registry for autonomous agents.
 
 It helps agents discover, acquire, initialize, and verify capabilities through interchangeable providers.
 
 ## Quick Start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jamesdigid/epistem/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/jamesdigid/SkillSupport/main/install.sh | sh
 ```
 
 ```bash
-epistem init
-epistem learn browser-attach
+caps init
+caps learn browser-attach
 ```
 
-`epistem init` creates a workspace manifest (`epistem.yaml`) plus a `capabilities/` directory.
-`epistem learn` looks up a capability in the registry, resolves a provider, acquires it, initializes it, and runs verification tests before marking it installed.
+`caps init` creates a workspace manifest (`skillsupport.yaml`) plus a `capabilities/` directory.
+`caps learn` looks up a capability in the registry, resolves a provider, acquires it, initializes it, and runs verification tests before marking it installed.
 
 ## Provider Layout
 
-Existing projects become Epistem-compatible by adding a lightweight `capabilities.yaml` manifest.
+Existing projects become SkillSupport-compatible by adding a lightweight `capabilities.yaml` manifest.
 
 ```text
 my-project/

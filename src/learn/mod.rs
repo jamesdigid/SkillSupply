@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::error::{EpistemError, Result};
+use crate::error::{Result, SkillSupportError};
 use crate::manifest::models::WorkspaceManifest;
 use crate::manifest::validation::ManifestValidator;
 use crate::provider::{
@@ -44,7 +44,7 @@ fn learn_inner(
     visited: &mut HashSet<String>,
 ) -> Result<LearnOutcome> {
     if !visited.insert(capability.to_string()) {
-        return Err(EpistemError::Registry(format!(
+        return Err(SkillSupportError::Registry(format!(
             "cyclic capability dependency detected at {capability}"
         )));
     }
@@ -60,12 +60,12 @@ fn learn_inner(
 
     let candidates = registry.providers_for(capability);
     if candidates.is_empty() {
-        return Err(EpistemError::Registry(format!(
+        return Err(SkillSupportError::Registry(format!(
             "no providers registered for {capability}"
         )));
     }
 
-    let temp_root = workspace_root.join(".epistem").join("acquired");
+    let temp_root = workspace_root.join(".skillsupport").join("acquired");
     fs::create_dir_all(&temp_root)?;
 
     let fetcher = LocalProviderFetcher;
@@ -160,7 +160,7 @@ fn record_workspace_capability(workspace_root: &Path, capability: &str) -> Resul
             name: workspace_root
                 .file_name()
                 .and_then(|value| value.to_str())
-                .unwrap_or("epistem-workspace")
+                .unwrap_or("skillsupport-workspace")
                 .to_string(),
             version: "0.1.0".to_string(),
             capabilities: Vec::new(),

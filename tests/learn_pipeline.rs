@@ -2,8 +2,8 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use epistem::learn::{LearnEngine, LearnOptions};
-use epistem::manifest::WorkspaceManifest;
+use skillsupport::learn::{LearnEngine, LearnOptions};
+use skillsupport::manifest::WorkspaceManifest;
 use tempfile::tempdir;
 
 struct CwdGuard {
@@ -39,7 +39,7 @@ fn learns_and_records_edge_browser_attach() {
     assert_eq!(outcome.capability, "browser-attach");
     assert!(outcome.provider_root.exists());
 
-    let workspace_manifest = tempdir.path().join("epistem.yaml");
+    let workspace_manifest = tempdir.path().join("skillsupport.yaml");
     assert!(workspace_manifest.exists());
     let source = fs::read_to_string(workspace_manifest).expect("workspace manifest");
     let workspace = serde_yaml_ng::from_str::<WorkspaceManifest>(&source).expect("workspace yaml");

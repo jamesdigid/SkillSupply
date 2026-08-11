@@ -53,13 +53,13 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # Builds the binary, packages it as `epistem-<target>.tar.gz` with the raw
-      # `epistem` executable at the archive root, and attaches it to the release
+  # Builds the binary, packages it as `caps-<target>.tar.gz` with the raw
+  # `caps` executable at the archive root, and attaches it to the release
       # created above. This is exactly what install.sh downloads.
       - name: Build and upload
         uses: taiki-e/upload-rust-binary-action@v1
         with:
-          bin: epistem
+          bin: caps
           target: ${{ matrix.target }}
           archive: $bin-$target
           tar: unix

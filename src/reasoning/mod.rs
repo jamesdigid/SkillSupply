@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-use crate::error::{EpistemError, Result};
+use crate::error::{Result, SkillSupportError};
 use crate::manifest::models::CapabilityManifest;
 use crate::provider::ProviderRef;
 
@@ -43,7 +43,7 @@ impl ProviderSelector for DeterministicSelector {
             }
         }
 
-        Err(EpistemError::Registry(format!(
+        Err(SkillSupportError::Registry(format!(
             "no compatible provider found for capability {capability}"
         )))
     }

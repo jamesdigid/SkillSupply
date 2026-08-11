@@ -4,7 +4,7 @@ use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
 
-use crate::error::{EpistemError, Result};
+use crate::error::{Result, SkillSupportError};
 use crate::manifest::models::CapabilityManifest;
 use crate::models::DependencyEdge;
 use crate::resolver::traits::{DependencyGraph, DependencyResolver};
@@ -51,7 +51,7 @@ impl DependencyGraph for PetgraphDependencyGraph {
                 .node_weight(cycle.node_id())
                 .cloned()
                 .unwrap_or_else(|| "<unknown>".to_string());
-            EpistemError::Resolution(format!("dependency cycle detected at {node}"))
+            SkillSupportError::Resolution(format!("dependency cycle detected at {node}"))
         })?;
 
         Ok(indices

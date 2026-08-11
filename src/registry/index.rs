@@ -5,7 +5,7 @@ use std::path::Path;
 use include_dir::{Dir, include_dir};
 use serde::{Deserialize, Serialize};
 
-use crate::error::{EpistemError, Result};
+use crate::error::{Result, SkillSupportError};
 use crate::provider::{ProviderRef, ProviderScheme};
 
 static EMBEDDED_REGISTRY: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/registry");
@@ -57,7 +57,7 @@ impl RegistryIndex {
                 continue;
             }
             let source = file.contents_utf8().ok_or_else(|| {
-                EpistemError::Registry(format!(
+                SkillSupportError::Registry(format!(
                     "embedded registry file is not utf-8: {}",
                     file.path().display()
                 ))

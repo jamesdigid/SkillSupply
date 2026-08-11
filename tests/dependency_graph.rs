@@ -1,5 +1,5 @@
-use epistem::manifest::{CapabilityManifest, CommunicationSpec, RuntimeSpec, RuntimeType};
-use epistem::resolver::{DependencyResolver, PetgraphDependencyResolver};
+use skillsupport::manifest::{CapabilityManifest, CommunicationSpec, RuntimeSpec, RuntimeType};
+use skillsupport::resolver::{DependencyResolver, PetgraphDependencyResolver};
 
 #[test]
 fn builds_dependency_graph() {
@@ -18,7 +18,7 @@ fn builds_dependency_graph() {
                 shutdown: None,
             },
             communication: Some(CommunicationSpec {
-                transport: epistem::manifest::TransportType::Stdio,
+                transport: skillsupport::manifest::TransportType::Stdio,
             }),
             prompt: None,
             tests: None,
@@ -38,7 +38,7 @@ fn builds_dependency_graph() {
                 shutdown: None,
             },
             communication: Some(CommunicationSpec {
-                transport: epistem::manifest::TransportType::Stdio,
+                transport: skillsupport::manifest::TransportType::Stdio,
             }),
             prompt: None,
             tests: None,

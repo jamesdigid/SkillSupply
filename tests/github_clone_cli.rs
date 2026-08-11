@@ -86,7 +86,7 @@ fn cli_learns_from_a_github_provider_via_git_clone() {
         std::env::var("PATH").expect("path")
     );
 
-    AssertCommand::cargo_bin("epistem")
+    AssertCommand::cargo_bin("caps")
         .expect("binary")
         .current_dir(workspace.path())
         .env("EPISTEM_GITHUB_BASE_URL", base_url)

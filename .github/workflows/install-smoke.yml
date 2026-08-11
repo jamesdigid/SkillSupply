@@ -16,15 +16,15 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name }}
 
-      - name: Install Epistem
+      - name: Install SkillSupport
         run: |
           sh ./install.sh
-          echo "$HOME/.epistem/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.skillsupport/bin" >> "$GITHUB_PATH"
         env:
-          EPISTEM_VERSION: ${{ github.event.release.tag_name }}
+          SKILLSUPPORT_VERSION: ${{ github.event.release.tag_name }}
 
       - name: Verify binary and learn flow
         run: |
-          epistem --version
-          epistem init
-          epistem learn browser-attach --registry tests/fixtures/registry
+          caps --version
+          caps init
+          caps learn browser-attach --registry tests/fixtures/registry

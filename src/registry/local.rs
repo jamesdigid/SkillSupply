@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::error::{EpistemError, Result};
+use crate::error::{Result, SkillSupportError};
 use crate::registry::traits::RegistryProvider;
 use crate::storage::capability::{CapabilitySource, FilesystemCapability};
 use crate::storage::loader::FilesystemCapabilityLoader;
@@ -27,7 +27,7 @@ impl LocalRegistry {
         self.register(capability);
         self.capabilities
             .last()
-            .ok_or_else(|| EpistemError::Registry("capability registry is empty".to_string()))
+            .ok_or_else(|| SkillSupportError::Registry("capability registry is empty".to_string()))
     }
 }
 

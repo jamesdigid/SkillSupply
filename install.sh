@@ -1,19 +1,22 @@
 #!/bin/sh
-# Epistem installer
+# SkillSupport installer
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/jamesdigid/epistem/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/jamesdigid/SkillSupport/main/install.sh | sh
 #
 # Environment variables:
-#   EPISTEM_INSTALL_DIR   Where to install the binary (default: $HOME/.epistem/bin)
-#   EPISTEM_VERSION       Release tag to install (default: latest)
-#   EPISTEM_FROM_SOURCE   Set to "1" to force building from source with cargo
+#   SKILLSUPPORT_INSTALL_DIR   Where to install the binary (default: $HOME/.skillsupport/bin)
+#   SKILLSUPPORT_VERSION       Release tag to install (default: latest)
+#   SKILLSUPPORT_FROM_SOURCE   Set to "1" to force building from source with cargo
+# Backward compatibility:
+#   EPISTEM_INSTALL_DIR, EPISTEM_VERSION, and EPISTEM_FROM_SOURCE are still accepted.
 set -eu
 
-REPO="jamesdigid/epistem"
-BIN_NAME="epistem"
-INSTALL_DIR="${EPISTEM_INSTALL_DIR:-$HOME/.epistem/bin}"
-VERSION="${EPISTEM_VERSION:-latest}"
+REPO="jamesdigid/SkillSupport"
+PACKAGE_NAME="skillsupport"
+BIN_NAME="caps"
+INSTALL_DIR="${SKILLSUPPORT_INSTALL_DIR:-${EPISTEM_INSTALL_DIR:-$HOME/.skillsupport/bin}}"
+VERSION="${SKILLSUPPORT_VERSION:-${EPISTEM_VERSION:-latest}}"
 
 # ---------------------------------------------------------------------------
 # Output helpers
@@ -164,9 +167,9 @@ install_from_source() {
   # cargo installs into its own bin dir; point users there afterwards.
   cargo_bin="${CARGO_HOME:-$HOME/.cargo}/bin"
   if [ "$VERSION" = "latest" ]; then
-    cargo install --git "https://github.com/${REPO}" --locked "$BIN_NAME"
+    cargo install --git "https://github.com/${REPO}" --bin "$BIN_NAME" --locked "$PACKAGE_NAME"
   else
-    cargo install --git "https://github.com/${REPO}" --tag "$VERSION" --locked "$BIN_NAME"
+    cargo install --git "https://github.com/${REPO}" --tag "$VERSION" --bin "$BIN_NAME" --locked "$PACKAGE_NAME"
   fi
   INSTALL_DIR="$cargo_bin"
 }
@@ -216,7 +219,7 @@ main() {
 
   target="$(detect_target)"
 
-  if [ "${EPISTEM_FROM_SOURCE:-0}" = "1" ]; then
+  if [ "${SKILLSUPPORT_FROM_SOURCE:-${EPISTEM_FROM_SOURCE:-0}}" = "1" ]; then
     install_from_source
   elif resolve_version && install_from_release "$target"; then
     :

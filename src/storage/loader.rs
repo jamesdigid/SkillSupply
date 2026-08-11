@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::error::{EpistemError, Result};
+use crate::error::{Result, SkillSupportError};
 use crate::manifest::validation::ManifestValidator;
 use crate::storage::capability::FilesystemCapability;
 
@@ -16,7 +16,7 @@ impl FilesystemCapabilityLoader {
 
     pub fn load(&self, capability_root: &Path) -> Result<FilesystemCapability> {
         if !capability_root.is_dir() {
-            return Err(EpistemError::MissingManifest(capability_root.to_path_buf()));
+            return Err(SkillSupportError::MissingManifest(capability_root.to_path_buf()));
         }
 
         let report = self.validator.validate_path(capability_root);
@@ -25,7 +25,7 @@ impl FilesystemCapabilityLoader {
                 capability_root.to_path_buf(),
                 manifest,
             )),
-            Some(_) | None => Err(EpistemError::InvalidManifest {
+            Some(_) | None => Err(SkillSupportError::InvalidManifest {
                 path: report.path,
                 reason: report
                     .issues

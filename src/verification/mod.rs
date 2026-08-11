@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{EpistemError, Result};
+use crate::error::{Result, SkillSupportError};
 use crate::manifest::models::{CapabilityManifest, TestSuitePaths};
 use crate::runtime::RuntimeSession;
 
@@ -61,7 +61,7 @@ impl VerificationRunner {
                 .and_then(|value| value.as_str())
                 .unwrap_or_default();
             if status != step.expect.status {
-                return Err(EpistemError::Registry(format!(
+                return Err(SkillSupportError::Registry(format!(
                     "verification {} failed: expected status {}, got {}",
                     suite.name, step.expect.status, status
                 )));

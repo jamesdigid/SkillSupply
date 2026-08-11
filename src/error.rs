@@ -2,8 +2,13 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
+pub const JSON_RPC_REGISTRATION_CONFLICT: i64 = -32001;
+pub const JSON_RPC_FORWARD_TARGET_GONE: i64 = -32002;
+pub const JSON_RPC_FORWARD_TIMEOUT: i64 = -32003;
+pub const JSON_RPC_SELF_INVOCATION: i64 = -32004;
+
 #[derive(Debug, Error)]
-pub enum EpistemError {
+pub enum SkillSupportError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
@@ -25,8 +30,14 @@ pub enum EpistemError {
     #[error("registry error: {0}")]
     Registry(String),
 
+    #[error("configuration error: {0}")]
+    Config(String),
+
+    #[error("transport error: {0}")]
+    Transport(String),
+
     #[error("search error: {0}")]
     Search(String),
 }
 
-pub type Result<T> = std::result::Result<T, EpistemError>;
+pub type Result<T> = std::result::Result<T, SkillSupportError>;
