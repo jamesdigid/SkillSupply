@@ -5,7 +5,7 @@ SkillSupport is organized around capabilities, not packages.
 ## Core Model
 
 - **Capability**: the stable public contract a user asks for, such as `browser-attach`.
-- **Provider**: a project that satisfies one or more capabilities through a `capabilities.yaml` manifest.
+- **Provider**: a project that satisfies one or more capabilities through a `caps.yaml` manifest.
 - **Registry**: a lightweight index that maps capabilities to candidate providers.
 - **Runtime**: the lifecycle used to acquire, initialize, and verify a provider.
 - **Verification**: startup and smoke tests that prove the provider is ready after installation.
@@ -16,7 +16,7 @@ SkillSupport is organized around capabilities, not packages.
 flowchart TD
   learn["caps learn browser-attach"] --> registry[Lookup registry entry]
   registry --> candidates[Candidate providers]
-  candidates --> manifest[Read provider capabilities.yaml]
+  candidates --> manifest[Read provider caps.yaml]
   manifest --> select[Select compatible provider]
   select --> acquire[Acquire provider]
   acquire --> init[Initialize runtime]

@@ -2,7 +2,7 @@
 
 This example shows the provider-side layout for a capability:
 
-- `capabilities.yaml`
+- `caps.yaml`
 - `prompt.md`
 - `tests/startup.yaml`
 - `tests/smoke.yaml`

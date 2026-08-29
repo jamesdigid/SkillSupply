@@ -20,11 +20,11 @@ caps learn browser-attach
 
 ## Provider Layout
 
-Existing projects become SkillSupport-compatible by adding a lightweight `capabilities.yaml` manifest.
+Existing projects become SkillSupport-compatible by adding a lightweight `caps.yaml` manifest.
 
 ```text
 my-project/
-├── capabilities.yaml
+├── caps.yaml
 ├── prompt.md
 ├── tests/
 └── existing project files...

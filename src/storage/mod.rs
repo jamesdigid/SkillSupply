@@ -1,3 +1,4 @@
+#[path = "caps.rs"]
 pub mod capability;
 pub mod loader;
 

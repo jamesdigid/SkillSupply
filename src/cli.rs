@@ -96,8 +96,8 @@ fn init(target_dir: Option<PathBuf>) -> crate::error::Result<()> {
         None => cwd.clone(),
     };
 
-    let capabilities_dir = target_dir.join("capabilities");
-    fs::create_dir_all(&capabilities_dir)?;
+    let caps_dir = target_dir.join("caps");
+    fs::create_dir_all(&caps_dir)?;
 
     let workspace_name = target_dir
         .file_name()
@@ -115,9 +115,9 @@ fn init(target_dir: Option<PathBuf>) -> crate::error::Result<()> {
     let workspace_doc = concat!(
         "# SkillSupport Workspace\n\n",
         "This directory was initialized by `caps init`.\n\n",
-        "Installed capabilities live under `capabilities/`.\n\n",
+        "Installed capabilities live under `caps/`.\n\n",
         "## Next Steps\n\n",
-        "- Add installed capabilities under `capabilities/`.\n",
+        "- Add installed capabilities under `caps/`.\n",
         "- Use `caps learn <capability>` to acquire a capability.\n"
     )
     .to_string();
@@ -380,14 +380,14 @@ mod tests {
     fn assert_scaffold(target_dir: &Path) {
         let manifest_path = target_dir.join(WORKSPACE_FILENAME);
         let workspace_doc_path = target_dir.join("SKILLSUPPORT.md");
-        let capabilities_dir = target_dir.join("capabilities");
+        let caps_dir = target_dir.join("caps");
 
         assert!(manifest_path.exists());
         assert!(workspace_doc_path.exists());
-        assert!(capabilities_dir.exists());
+        assert!(caps_dir.exists());
         assert!(
-            fs::read_dir(&capabilities_dir)
-                .expect("capabilities dir")
+            fs::read_dir(&caps_dir)
+                .expect("caps dir")
                 .next()
                 .is_none()
         );
@@ -396,6 +396,6 @@ mod tests {
         assert!(manifest.contains("version: 0.1.0"));
 
         let workspace_doc = fs::read_to_string(workspace_doc_path).expect("workspace doc");
-        assert!(workspace_doc.contains("Installed capabilities live under `capabilities/`"));
+        assert!(workspace_doc.contains("Installed capabilities live under `caps/`"));
     }
 }

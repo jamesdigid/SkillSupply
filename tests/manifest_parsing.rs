@@ -6,7 +6,7 @@ fn parses_manifest() {
     let parser = YamlManifestParser;
     let manifest = parser
         .parse_path(std::path::Path::new(
-            "examples/gmail-send/capabilities.yaml",
+            "examples/gmail-send/caps.yaml",
         ))
         .expect("manifest should parse");
 

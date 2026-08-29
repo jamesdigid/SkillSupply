@@ -24,14 +24,14 @@ fn validates_manifest() {
 #[test]
 fn accepts_plural_capabilities_manifest_filename() {
     let dir = tempdir().expect("temp dir");
-    fs::write(dir.path().join("capabilities.yaml"), SAMPLE_MANIFEST).expect("write manifest");
+    fs::write(dir.path().join("caps.yaml"), SAMPLE_MANIFEST).expect("write manifest");
 
     let validator = ManifestValidator::default();
     let report = validator.validate_path(dir.path());
 
     assert!(report.valid, "{:#?}", report.issues);
     assert!(
-        report.path.ends_with("capabilities.yaml"),
+        report.path.ends_with("caps.yaml"),
         "expected plural manifest path, got {}",
         report.path.display()
     );
@@ -51,7 +51,7 @@ fn requires_plural_capabilities_manifest_filename() {
         "singular capability.yaml should not be treated as a valid manifest"
     );
     assert!(
-        report.path.ends_with("capabilities.yaml"),
+        report.path.ends_with("caps.yaml"),
         "validator should look for the plural manifest, got {}",
         report.path.display()
     );

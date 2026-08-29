@@ -54,6 +54,6 @@ fn learns_and_records_edge_browser_attach() {
         .path()
         .join("capabilities")
         .join("browser-attach")
-        .join("capabilities.yaml");
+        .join("caps.yaml");
     assert!(installed_manifest.exists());
 }

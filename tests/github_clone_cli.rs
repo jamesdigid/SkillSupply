@@ -50,7 +50,7 @@ fn cli_learns_from_a_github_provider_via_git_clone() {
     let source_repo = remote_root.path().join("jamesdigid/browser-attach.git");
     fs::create_dir_all(&source_repo).expect("source repo dir");
     write_file(
-        &source_repo.join("capabilities.yaml"),
+        &source_repo.join("caps.yaml"),
         "name: browser-attach\nversion: 1.0.0\ndescription: Git-backed browser attach fixture\ncapabilities:\n  - browser-attach\ndependencies: []\ninstall:\n  requires: []\n  steps: []\nruntime:\n  type: launch\n  initialize: sh bin/provider.sh\n  ready:\n    type: stdio_handshake\n    expected: ready\n  shutdown: null\ncommunication:\n  transport: stdio\nprompt: prompt.md\ntests:\n  startup: tests/startup.yaml\n  smoke: tests/smoke.yaml\nkeywords:\n  - browser\n",
     );
     write_file(

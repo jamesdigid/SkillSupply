@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-pub const MANIFEST_FILENAME: &str = "capabilities.yaml";
+pub const MANIFEST_FILENAME: &str = "caps.yaml";
 pub const WORKSPACE_FILENAME: &str = "skillsupport.yaml";
 pub const PROMPT_FILENAME: &str = "prompt.md";
 

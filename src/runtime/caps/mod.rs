@@ -6,13 +6,6 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use crate::error::{Result, SkillSupportError};
 use crate::manifest::models::{CapabilityManifest, ReadyProbe, RuntimeType};
 
-#[path = "caps/mod.rs"]
-pub mod capabilities;
-pub mod config;
-pub mod lifecycle;
-pub mod services;
-pub mod transport;
-
 pub struct RuntimeSession {
     child: Option<Child>,
     stdin: Option<ChildStdin>,
