@@ -1,13 +1,17 @@
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use clap::{Parser, Subcommand};
 
+use crate::error::SkillSupportError;
 use crate::learn::{LearnEngine, LearnOptions};
 use crate::manifest::validation::ManifestValidator;
 use crate::manifest::{CapabilityManifest, WorkspaceManifest};
 use crate::resolver::{DependencyResolver, PetgraphDependencyResolver};
+use crate::runtime::config::RuntimeConfig;
 use crate::storage::{CapabilitySource, FilesystemCapabilityLoader};
 use crate::utils::paths::WORKSPACE_FILENAME;
 
@@ -50,6 +54,18 @@ enum Commands {
     },
     Graph,
     Search,
+    /// Start the local Epistem developer runtime.
+    Dev {
+        /// Path to a TOML config file with a [runtime] section.
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// Override the runtime transport host.
+        #[arg(long)]
+        host: Option<String>,
+        /// Override the runtime transport port.
+        #[arg(long)]
+        port: Option<u16>,
+    },
 }
 
 pub fn run() -> crate::error::Result<()> {
@@ -84,9 +100,38 @@ pub fn run() -> crate::error::Result<()> {
         Commands::Search => {
             println!("search is not implemented yet");
         }
+        Commands::Dev { config, host, port } => {
+            dev(config, host, port)?;
+        }
     }
 
     Ok(())
+}
+
+fn dev(
+    config_path: Option<PathBuf>,
+    host: Option<String>,
+    port: Option<u16>,
+) -> crate::error::Result<()> {
+    let config = match config_path {
+        Some(path) => RuntimeConfig::load(&path)?,
+        None => RuntimeConfig::default(),
+    }
+    .with_host(host)
+    .with_port(port);
+
+    println!("Epistem Runtime\n");
+    println!("Transport: {}\n", config.transport_url());
+    println!("Waiting for capabilities...");
+
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let signal_shutdown = Arc::clone(&shutdown);
+    ctrlc::set_handler(move || {
+        signal_shutdown.store(true, Ordering::SeqCst);
+    })
+    .map_err(|error| SkillSupportError::Transport(error.to_string()))?;
+
+    crate::runtime::serve(&config, shutdown)
 }
 
 fn init(target_dir: Option<PathBuf>) -> crate::error::Result<()> {

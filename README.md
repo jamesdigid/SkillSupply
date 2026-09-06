@@ -56,6 +56,10 @@ cargo clippy
 
 Requires Rust 1.85+.
 
+## Runtime Protocol
+
+External capabilities can connect to `caps dev` over WebSocket JSON-RPC, register their methods, and receive lifecycle notifications. See [docs/runtime-protocol.md](docs/runtime-protocol.md) for the capability authoring guide and Browser Attach example.
+
 ## Roadmap
 
 - GitHub-backed provider discovery

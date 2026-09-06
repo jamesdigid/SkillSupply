@@ -2,11 +2,6 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-pub const JSON_RPC_REGISTRATION_CONFLICT: i64 = -32001;
-pub const JSON_RPC_FORWARD_TARGET_GONE: i64 = -32002;
-pub const JSON_RPC_FORWARD_TIMEOUT: i64 = -32003;
-pub const JSON_RPC_SELF_INVOCATION: i64 = -32004;
-
 #[derive(Debug, Error)]
 pub enum SkillSupportError {
     #[error("I/O error: {0}")]
@@ -41,3 +36,8 @@ pub enum SkillSupportError {
 }
 
 pub type Result<T> = std::result::Result<T, SkillSupportError>;
+
+pub const JSON_RPC_REGISTRATION_CONFLICT: i64 = -32001;
+pub const JSON_RPC_FORWARD_TARGET_GONE: i64 = -32002;
+pub const JSON_RPC_FORWARD_TIMEOUT: i64 = -32003;
+pub const JSON_RPC_SELF_INVOCATION: i64 = -32004;

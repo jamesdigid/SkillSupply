@@ -10,7 +10,7 @@ use crate::provider::{
 };
 use crate::reasoning::{CandidateProvider, DeterministicSelector, ProviderSelector};
 use crate::registry::RegistryIndex;
-use crate::runtime::RuntimeController;
+use crate::runtime::capabilities::RuntimeController;
 use crate::utils::paths::WORKSPACE_FILENAME;
 use crate::verification::VerificationRunner;
 
