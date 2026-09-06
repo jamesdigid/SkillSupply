@@ -41,7 +41,7 @@ port = 8787
 forward_timeout_ms = 30000
 ```
 
-3. Register the capability with one or more method names:
+3. Register the capability with compact method references:
 
 ```json
 {
@@ -50,7 +50,18 @@ forward_timeout_ms = 30000
   "params": {
     "capability": "browser-attach",
     "version": "1.0.0",
-    "methods": ["browser.navigate", "browser.screenshot"]
+    "methods": [
+      {
+        "name": "browser.navigate",
+        "contract_sha": "sha256:1e8f6c4c...",
+        "summary": "Navigate the active browser tab to a URL."
+      },
+      {
+        "name": "browser.screenshot",
+        "contract_sha": "sha256:7aa2f093...",
+        "summary": "Capture a screenshot of the active browser tab."
+      }
+    ]
   },
   "id": 1
 }
@@ -121,7 +132,7 @@ Returns runtime health, uptime, connected session count, and registered capabili
 
 ### `runtime.register`
 
-Registers the caller's capability and contributed methods.
+Registers the caller's capability and contributed method references.
 
 Params:
 
@@ -129,13 +140,20 @@ Params:
 {
   "capability": "browser-attach",
   "version": "1.0.0",
-  "methods": ["browser.navigate", "browser.screenshot"]
+  "methods": [
+    {
+      "name": "browser.navigate",
+      "contract_sha": "sha256:1e8f6c4c...",
+      "summary": "Navigate the active browser tab to a URL."
+    }
+  ]
 }
 ```
 
 Rules:
 
 - Method names must be unique across all connected capabilities.
+- Each method reference points at an immutable contract by `contract_sha`.
 - `runtime.*` and `lifecycle.*` are reserved prefixes.
 - Registrations are tied to the current session and removed automatically on disconnect.
 - A session cannot invoke methods registered by that same session.
@@ -157,7 +175,18 @@ Returns registered capabilities and their methods:
     {
       "capability": "browser-attach",
       "version": "1.0.0",
-      "methods": ["browser.navigate", "browser.screenshot"]
+      "methods": [
+        {
+          "name": "browser.navigate",
+          "contract_sha": "sha256:1e8f6c4c...",
+          "summary": "Navigate the active browser tab to a URL."
+        },
+        {
+          "name": "browser.screenshot",
+          "contract_sha": "sha256:7aa2f093...",
+          "summary": "Capture a screenshot of the active browser tab."
+        }
+      ]
     }
   ]
 }
@@ -165,11 +194,8 @@ Returns registered capabilities and their methods:
 
 ## Method Contracts
 
-Method names are enough for the runtime to route calls, but agents also need method
-contracts to understand how to call those methods. CAPS should treat method contracts as
-content-addressed, immutable documents.
-
-The intended discovery flow is:
+CAPS contracts are content-addressed and immutable. Registration returns compact method
+refs; the full contract is hydrated by SHA only when needed.
 
 ```text
 CAPS capability
@@ -180,23 +206,7 @@ LLM
   -> compact interface summary
 ```
 
-The runtime should avoid returning full hydrated schemas to the LLM by default. Instead,
-capabilities advertise compact method references during registration, and the agent
-runtime or client library hydrates the full contract only when it needs an uncached SHA.
-The model should usually see a minimal useful representation: method name, short
-description, required arguments, and other concise calling hints.
-
-Planned method references look like this:
-
-```json
-{
-  "name": "browser.navigate",
-  "contract_sha": "sha256:1e8f6c4c...",
-  "summary": "Navigate the active browser tab to a URL."
-}
-```
-
-The full contract can then be requested by SHA:
+Contract hydration:
 
 ```json
 {
@@ -209,20 +219,16 @@ The full contract can then be requested by SHA:
 }
 ```
 
-The hash must represent the canonical contract content, not incidental formatting. Two
-contracts with equivalent canonical content should produce the same SHA even if their
-source files differ in whitespace, object key order, or other tiny presentation details.
-Two semantically different contracts must produce different SHAs.
+The SHA is computed over canonical contract content, not formatting noise such as
+whitespace or object key order. Equivalent canonical contracts share a SHA; semantic
+contract changes produce a new SHA.
 
-Contracts are immutable by definition. Once a SHA is published, the content behind that
-SHA cannot change. Any contract change, including a schema change or behavioral contract
-change, creates a new canonical document and therefore a new SHA. This prevents agents
-from learning against one contract and later calling a subtly different one under the
-same identifier.
+Once published, a contract SHA never points at different content. This keeps agents from
+learning against one contract and later calling a subtly different one under the same id.
 
-Current implementation note: `caps dev` currently routes registered method names. Contract
-references, canonical contract hashing, and `runtime.contract` hydration are protocol
-design targets and are not implemented yet.
+The LLM should not receive hydrated schemas by default. The agent runtime or client
+library should cache full contracts and expose only a compact calling interface to the
+model.
 
 ## Lifecycle Notifications
 
@@ -238,7 +244,13 @@ The runtime pushes lifecycle events to connected sessions as JSON-RPC notificati
     "capability": {
       "capability": "browser-attach",
       "version": "1.0.0",
-      "methods": ["browser.navigate"]
+      "methods": [
+        {
+          "name": "browser.navigate",
+          "contract_sha": "sha256:1e8f6c4c...",
+          "summary": "Navigate the active browser tab to a URL."
+        }
+      ]
     }
   }
 }
@@ -299,10 +311,16 @@ Registration:
     "capability": "browser-attach",
     "version": "1.0.0",
     "methods": [
-      "browser.navigate",
-      "browser.reload",
-      "browser.screenshot",
-      "browser.evaluate"
+      {
+        "name": "browser.navigate",
+        "contract_sha": "sha256:1e8f6c4c...",
+        "summary": "Navigate the active browser tab to a URL."
+      },
+      {
+        "name": "browser.screenshot",
+        "contract_sha": "sha256:7aa2f093...",
+        "summary": "Capture a screenshot of the active browser tab."
+      }
     ]
   },
   "id": 1
