@@ -3,15 +3,42 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use serde_json::Value;
+use skillsupport::runtime;
+use skillsupport::runtime::config::{RuntimeConfig, TransportKind};
 use skillsupport::runtime::lifecycle::{LifecycleBus, NotificationBroadcaster};
 use skillsupport::runtime::services::registry::RuntimeCapabilityRegistry;
 use skillsupport::runtime::transport::{
     Dispatcher, PendingRequests, Router, SessionManager, WebSocketTransport,
     register_runtime_methods,
 };
-use serde_json::Value;
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{Message, connect};
+
+#[test]
+fn runtime_serve_wires_builtin_methods() {
+    let port = open_local_port();
+    let config = RuntimeConfig {
+        transport: TransportKind::Websocket,
+        host: "127.0.0.1".to_string(),
+        port,
+        forward_timeout_ms: 2_000,
+    };
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let serve_shutdown = Arc::clone(&shutdown);
+    let server = thread::spawn(move || {
+        runtime::serve(&config, serve_shutdown).expect("serve runtime");
+    });
+
+    let url = format!("ws://127.0.0.1:{port}");
+    let mut socket = connect_with_retry(&url);
+    let ping = request(&mut socket, "runtime.ping", None, 1);
+    assert_eq!(ping["result"], Value::from("pong"));
+
+    socket.close(None).expect("close socket");
+    shutdown.store(true, Ordering::SeqCst);
+    server.join().expect("server thread");
+}
 
 #[test]
 fn dev_runtime_answers_builtin_methods_and_reconnects() {
@@ -23,7 +50,10 @@ fn dev_runtime_answers_builtin_methods_and_reconnects() {
 
     let version = request(&mut socket, "runtime.version", None, 2);
     assert_eq!(version["result"]["name"], Value::from("skillsupport"));
-    assert_eq!(version["result"]["version"], Value::from(skillsupport::VERSION));
+    assert_eq!(
+        version["result"]["version"],
+        Value::from(skillsupport::VERSION)
+    );
 
     let health = request(&mut socket, "runtime.health", None, 3);
     assert_eq!(health["result"]["status"], Value::from("ok"));
@@ -292,6 +322,35 @@ fn wait_for(condition: impl Fn() -> bool) {
         thread::sleep(Duration::from_millis(10));
     }
     panic!("condition was not met before deadline");
+}
+
+fn open_local_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .expect("bind ephemeral port")
+        .local_addr()
+        .expect("local addr")
+        .port()
+}
+
+fn connect_with_retry(url: &str) -> tungstenite::WebSocket<MaybeTlsStream<std::net::TcpStream>> {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match connect(url) {
+            Ok((mut socket, _)) => {
+                if let MaybeTlsStream::Plain(stream) = socket.get_mut() {
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(2)))
+                        .expect("set read timeout");
+                }
+                return socket;
+            }
+            Err(error) if Instant::now() < deadline => {
+                let _ = error;
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => panic!("connect websocket before deadline: {error}"),
+        }
+    }
 }
 
 struct RuntimeHarness {
