@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
@@ -9,7 +9,7 @@ use crate::error::{
 use crate::runtime::lifecycle::{LifecycleBus, LifecycleEvent};
 use crate::runtime::services::registry::RuntimeCapabilityRegistry;
 
-use super::pending::PendingRequests;
+use super::pending::{PendingForward, PendingRequests};
 use super::router::{
     JsonRpcError, JsonRpcMessage, JsonRpcRequest, JsonRpcResponse, MethodContext, Router,
     parse_message,
@@ -58,7 +58,7 @@ impl Dispatcher {
         };
 
         match parse_message(value) {
-            Ok(JsonRpcMessage::Response(response)) => self.handle_response(response),
+            Ok(JsonRpcMessage::Response(response)) => self.handle_response(caller, response),
             Ok(JsonRpcMessage::Request(request)) => self.handle_request(caller, request),
             Err(error) => self.send_response(caller, JsonRpcResponse::failure(error, Value::Null)),
         }
@@ -70,6 +70,20 @@ impl Dispatcher {
     }
 
     pub fn handle_disconnect(&self, session_id: SessionId) {
+        for (_, forward) in self.pending.drain_owner(session_id) {
+            self.send_response(
+                forward.caller,
+                JsonRpcResponse::failure(
+                    JsonRpcError::server_error(
+                        JSON_RPC_FORWARD_TARGET_GONE,
+                        format!("forward target disconnected for method {}", forward.method),
+                    ),
+                    forward.original_id,
+                ),
+            );
+        }
+        self.pending.drain_caller(session_id);
+
         for capability in self.registry.unregister_session(session_id) {
             self.lifecycle.emit(LifecycleEvent::CapabilityUnregistered {
                 session_id,
@@ -80,9 +94,31 @@ impl Dispatcher {
             .emit(LifecycleEvent::SessionDisconnected { session_id });
     }
 
-    fn handle_response(&self, response: JsonRpcResponse) {
+    pub fn reap_expired_pending(&self) {
+        for (_, forward) in self.pending.take_expired(Instant::now()) {
+            self.send_response(
+                forward.caller,
+                JsonRpcResponse::failure(
+                    JsonRpcError::server_error(
+                        JSON_RPC_FORWARD_TIMEOUT,
+                        format!("forward timed out for method {}", forward.method),
+                    ),
+                    forward.original_id,
+                ),
+            );
+        }
+    }
+
+    pub fn next_pending_deadline(&self) -> Option<Instant> {
+        self.pending.next_deadline()
+    }
+
+    fn handle_response(&self, responder: SessionId, mut response: JsonRpcResponse) {
         if let Some(id) = response.id.as_u64() {
-            self.pending.deliver(id, response);
+            if let Some(forward) = self.pending.take(id, responder) {
+                response.id = forward.original_id;
+                self.send_response(forward.caller, response);
+            }
         }
     }
 
@@ -140,7 +176,16 @@ impl Dispatcher {
 
         let original_id = request.id.clone();
         let forward_id = self.pending.next_id();
-        let receiver = self.pending.insert(forward_id);
+        self.pending.insert(
+            forward_id,
+            PendingForward {
+                caller,
+                owner,
+                original_id: original_id.clone(),
+                method: request.method.clone(),
+                deadline: Instant::now() + self.forward_timeout,
+            },
+        );
         let payload = request_payload(&request, Some(Value::from(forward_id)));
         let Ok(payload) = serde_json::to_string(&payload) else {
             self.pending.cancel(forward_id);
@@ -159,27 +204,6 @@ impl Dispatcher {
                     original_id,
                 ),
             );
-            return;
-        }
-
-        match receiver.recv_timeout(self.forward_timeout) {
-            Ok(mut response) => {
-                response.id = original_id;
-                self.send_response(caller, response);
-            }
-            Err(_) => {
-                self.pending.cancel(forward_id);
-                self.send_response(
-                    caller,
-                    JsonRpcResponse::failure(
-                        JsonRpcError::server_error(
-                            JSON_RPC_FORWARD_TIMEOUT,
-                            format!("forward timed out for method {}", request.method),
-                        ),
-                        original_id,
-                    ),
-                );
-            }
         }
     }
 

@@ -1,6 +1,7 @@
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::time::Instant;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 use crate::error::Result;
 
@@ -46,9 +47,46 @@ pub fn serve(config: &RuntimeConfig, shutdown: Arc<AtomicBool>) -> Result<()> {
         Arc::clone(&lifecycle),
         config.forward_timeout(),
     );
-
     let transport = WebSocketTransport::bind(config.socket_addr()?)?;
-    let result = transport.serve(dispatcher, sessions, shutdown);
+    let reaper = start_pending_reaper(
+        dispatcher.clone(),
+        Arc::clone(&sessions),
+        Arc::clone(&shutdown),
+        config.reaper_tick(),
+        config.session_ttl(),
+    );
+
+    let result = transport.serve(dispatcher, sessions, Arc::clone(&shutdown));
     lifecycle.emit(LifecycleEvent::RuntimeShuttingDown);
+    shutdown.store(true, Ordering::SeqCst);
+    let _ = reaper.join();
     result
+}
+
+fn start_pending_reaper(
+    dispatcher: Dispatcher,
+    sessions: Arc<SessionManager>,
+    shutdown: Arc<AtomicBool>,
+    reaper_tick: Duration,
+    session_ttl: Duration,
+) -> JoinHandle<()> {
+    thread::spawn(move || {
+        while !shutdown.load(Ordering::SeqCst) {
+            dispatcher.reap_expired_pending();
+            sessions.reap_disconnected(session_ttl);
+
+            let sleep_for = dispatcher
+                .next_pending_deadline()
+                .map(|deadline| {
+                    deadline
+                        .saturating_duration_since(Instant::now())
+                        .min(reaper_tick)
+                })
+                .unwrap_or(reaper_tick);
+            thread::sleep(sleep_for);
+        }
+
+        dispatcher.reap_expired_pending();
+        sessions.reap_disconnected(session_ttl);
+    })
 }

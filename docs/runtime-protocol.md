@@ -7,6 +7,16 @@ methods they handle, and receive forwarded JSON-RPC requests over the same socke
 The implemented transport is WebSocket text frames carrying JSON-RPC 2.0 messages.
 Binary WebSocket frames are ignored.
 
+## Implementation Status
+
+Implemented today: session management, capability registration by method name, the
+built-in `runtime.*` methods, request forwarding with id rewriting, forward timeouts, and
+lifecycle notifications.
+
+Designed but not implemented: contract SHAs and `runtime.contract` hydration, method refs
+carrying `contract_sha`, execution modes, jobs, progress, and cancellation. Registration
+currently accepts plain method-name strings.
+
 ## Connection Flow
 
 1. Start the runtime:
@@ -39,6 +49,8 @@ transport = "websocket"
 host = "127.0.0.1"
 port = 8787
 forward_timeout_ms = 30000
+reaper_tick_ms = 50
+session_ttl_ms = 300000
 ```
 
 3. Register the capability with compact method references:
@@ -230,6 +242,97 @@ The LLM should not receive hydrated schemas by default. The agent runtime or cli
 library should cache full contracts and expose only a compact calling interface to the
 model.
 
+## Execution Modes
+
+A contract declares how its method executes, so callers know the calling convention
+before they invoke it:
+
+```json
+{
+  "name": "migration.run",
+  "contract_sha": "sha256:9c02be71...",
+  "summary": "Migrate a source site into the target dataset.",
+  "execution": "job",
+  "cancelable": true
+}
+```
+
+- `immediate` (default): one forwarded request, one response, bounded by
+  `forward_timeout_ms`.
+- `job`: the runtime mints a job id and returns it immediately. The capability reports
+  progress and completion against that id.
+
+### Immediate Methods
+
+The current forward-and-respond behavior, plus optional progress and cancellation.
+
+### Job Methods
+
+The caller invokes the method normally:
+
+```json
+{"jsonrpc":"2.0","method":"migration.run","params":{"source":"wordpress"},"id":7}
+```
+
+The runtime responds with a handle instead of a result:
+
+```json
+{"jsonrpc":"2.0","result":{"job_id":"job-4f3c1a","status":"running"},"id":7}
+```
+
+The runtime forwards the work to the capability as a notification carrying the job id:
+
+```json
+{"jsonrpc":"2.0","method":"migration.run","params":{"source":"wordpress"},"job_id":"job-4f3c1a"}
+```
+
+The capability emits progress, which the runtime routes to the calling session only:
+
+```json
+{"jsonrpc":"2.0","method":"runtime.progress","params":{"job_id":"job-4f3c1a","completed":312,"total":4000,"message":"Uploading assets"}}
+```
+
+```json
+{"jsonrpc":"2.0","method":"job.progress","params":{"job_id":"job-4f3c1a","completed":312,"total":4000,"message":"Uploading assets"}}
+```
+
+The capability finishes with `runtime.job.complete` or `runtime.job.fail`:
+
+```json
+{"jsonrpc":"2.0","method":"runtime.job.complete","params":{"job_id":"job-4f3c1a","result":{"documents":4000}}}
+```
+
+The caller receives a terminal status notification:
+
+```json
+{"jsonrpc":"2.0","method":"job.status","params":{"job_id":"job-4f3c1a","status":"completed","result":{"documents":4000}}}
+```
+
+Progress on an immediate method uses the forwarded request `id` in place of `job_id`.
+
+### Cancellation
+
+The caller cancels by request id or job id:
+
+```json
+{"jsonrpc":"2.0","method":"runtime.cancel","params":{"job_id":"job-4f3c1a"},"id":8}
+```
+
+The runtime marks the job `canceling` and notifies the owner with `job.cancel`.
+Cancellation is cooperative: the job is not terminal until the capability confirms with
+`runtime.job.complete` or `runtime.job.fail`.
+
+### Job Inspection
+
+- `runtime.job` returns the status of one job.
+- `runtime.jobs` lists jobs visible to the caller.
+
+### Correlation
+
+Forwarded request ids are correlated with the owning session, so only that session can
+satisfy a pending request. Job ids are opaque tokens rather than sequential counters,
+because they are held by callers and survive reconnects.
+
 ## Lifecycle Notifications
 
 The runtime pushes lifecycle events to connected sessions as JSON-RPC notifications
@@ -275,6 +378,9 @@ Runtime-specific JSON-RPC errors use the server-error range:
 - `-32002`: forward target disconnected
 - `-32003`: forward timeout
 - `-32004`: self-invocation
+- `-32005`: unknown job
+- `-32006`: job canceled
+- `-32007`: job orphaned
 
 Standard JSON-RPC errors are also used:
 
@@ -296,6 +402,16 @@ On disconnect, the runtime:
 
 On reconnect, the capability should call `runtime.register` again. The same method names can
 be reused after the old session is disconnected.
+
+Jobs outlive sessions, so job ownership is tracked by capability name rather than session
+id. When a capability disconnects:
+
+1. In-flight immediate requests fail with `-32002`.
+2. Its jobs move to `orphaned`, and callers receive a `job.status` notification.
+3. Orphaned jobs expire after `job_ttl_ms`.
+
+After re-registering, a capability calls `runtime.jobs` to find its orphaned jobs, then
+either resumes them with `runtime.job.resume` or ends them with `runtime.job.fail`.
 
 ## Browser Extension Example
 

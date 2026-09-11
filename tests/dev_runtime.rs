@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -23,6 +24,8 @@ fn runtime_serve_wires_builtin_methods() {
         host: "127.0.0.1".to_string(),
         port,
         forward_timeout_ms: 2_000,
+        reaper_tick_ms: 10,
+        session_ttl_ms: 300_000,
     };
     let shutdown = Arc::new(AtomicBool::new(false));
     let serve_shutdown = Arc::clone(&shutdown);
@@ -103,6 +106,125 @@ fn forwards_registered_methods_between_sessions() {
 
     let response = read_until_id(&mut caller, 11);
     assert_eq!(response["result"], Value::from(5));
+
+    runtime.shutdown();
+}
+
+#[test]
+fn concurrent_forwards_do_not_serialize() {
+    let runtime = RuntimeHarness::spawn(Duration::from_secs(2));
+    let mut caller = runtime.connect();
+    let mut capability = runtime.connect();
+    let count = 64_u64;
+
+    register_capability(&mut capability, "math", &["math.add"], 20);
+    let start = Instant::now();
+    for value in 0..count {
+        send_request(
+            &mut caller,
+            "math.add",
+            Some(serde_json::json!({ "value": value })),
+            100 + value,
+        );
+    }
+
+    let mut forwarded = Vec::new();
+    for _ in 0..count {
+        let request = read_request(&mut capability, "math.add");
+        forwarded.push((
+            request["id"].clone(),
+            request["params"]["value"]
+                .as_u64()
+                .expect("forwarded value should be a u64"),
+        ));
+    }
+
+    for (forward_id, value) in forwarded.into_iter().rev() {
+        send_response(
+            &mut capability,
+            forward_id,
+            serde_json::json!({ "value": value }),
+        );
+    }
+
+    let responses = read_result_values(&mut caller, 100, count);
+    for value in 0..count {
+        assert_eq!(responses.get(&(100 + value)), Some(&value));
+    }
+    assert!(start.elapsed() < Duration::from_secs(2));
+
+    runtime.shutdown();
+}
+
+#[test]
+fn response_from_non_owner_is_ignored() {
+    let runtime = RuntimeHarness::spawn(Duration::from_secs(2));
+    let mut caller = runtime.connect();
+    let mut capability = runtime.connect();
+    let mut intruder = runtime.connect();
+
+    register_capability(&mut capability, "math", &["math.add"], 60);
+    send_request(
+        &mut caller,
+        "math.add",
+        Some(serde_json::json!({ "value": 5 })),
+        61,
+    );
+
+    let forwarded = read_request(&mut capability, "math.add");
+    send_response(
+        &mut intruder,
+        forwarded["id"].clone(),
+        serde_json::json!({ "value": "spoofed" }),
+    );
+    send_response(
+        &mut capability,
+        forwarded["id"].clone(),
+        serde_json::json!({ "value": 5 }),
+    );
+
+    let response = read_until_id(&mut caller, 61);
+    assert_eq!(response["result"]["value"], Value::from(5));
+
+    runtime.shutdown();
+}
+
+#[test]
+fn owner_disconnect_fails_pending_requests() {
+    let runtime = RuntimeHarness::spawn(Duration::from_secs(2));
+    let mut caller = runtime.connect();
+    let mut capability = runtime.connect();
+
+    register_capability(&mut capability, "math", &["math.add"], 70);
+    send_request(&mut caller, "math.add", None, 71);
+    let _forwarded = read_request(&mut capability, "math.add");
+    capability.close(None).expect("close capability");
+
+    let response = read_until_id(&mut caller, 71);
+    assert_eq!(response["error"]["code"], Value::from(-32002));
+
+    runtime.shutdown();
+}
+
+#[test]
+fn messages_from_one_session_process_in_order() {
+    let runtime = RuntimeHarness::spawn(Duration::from_secs(2));
+    let mut client = runtime.connect();
+
+    send_request(
+        &mut client,
+        "runtime.register",
+        Some(serde_json::json!({
+            "capability": "math",
+            "methods": ["math.add"],
+            "version": "1.0.0",
+        })),
+        80,
+    );
+    send_request(&mut client, "math.add", None, 81);
+
+    let response = read_until_id(&mut client, 81);
+    assert_eq!(response["error"]["code"], Value::from(-32004));
 
     runtime.shutdown();
 }
@@ -324,6 +446,33 @@ fn wait_for(condition: impl Fn() -> bool) {
     panic!("condition was not met before deadline");
 }
 
+fn read_result_values(
+    socket: &mut tungstenite::WebSocket<MaybeTlsStream<std::net::TcpStream>>,
+    first_id: u64,
+    count: u64,
+) -> HashMap<u64, u64> {
+    let expected = (first_id..first_id + count).collect::<HashSet<_>>();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut responses = HashMap::new();
+
+    while Instant::now() < deadline && responses.len() < expected.len() {
+        let value = read_json(socket);
+        let Some(id) = value.get("id").and_then(Value::as_u64) else {
+            continue;
+        };
+        if !expected.contains(&id) {
+            continue;
+        }
+        let result = value["result"]["value"]
+            .as_u64()
+            .expect("response result value should be a u64");
+        responses.insert(id, result);
+    }
+
+    assert_eq!(responses.len(), expected.len());
+    responses
+}
+
 fn open_local_port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0")
         .expect("bind ephemeral port")
@@ -357,6 +506,7 @@ struct RuntimeHarness {
     url: String,
     shutdown: Arc<AtomicBool>,
     server: Option<thread::JoinHandle<()>>,
+    reaper: Option<thread::JoinHandle<()>>,
     sessions: Arc<SessionManager>,
 }
 
@@ -391,6 +541,13 @@ impl RuntimeHarness {
         let transport = WebSocketTransport::bind("127.0.0.1:0").expect("bind transport");
         let addr = transport.local_addr().expect("local addr");
         let shutdown = Arc::new(AtomicBool::new(false));
+        let reaper = spawn_test_reaper(
+            dispatcher.clone(),
+            Arc::clone(&sessions),
+            Arc::clone(&shutdown),
+            Duration::from_millis(10),
+            Duration::from_secs(300),
+        );
         let serve_shutdown = Arc::clone(&shutdown);
         let serve_sessions = Arc::clone(&sessions);
         let server = thread::spawn(move || {
@@ -403,6 +560,7 @@ impl RuntimeHarness {
             url: format!("ws://{addr}"),
             shutdown,
             server: Some(server),
+            reaper: Some(reaper),
             sessions,
         }
     }
@@ -422,6 +580,9 @@ impl RuntimeHarness {
         if let Some(server) = self.server.take() {
             server.join().expect("server thread");
         }
+        if let Some(reaper) = self.reaper.take() {
+            reaper.join().expect("reaper thread");
+        }
     }
 }
 
@@ -431,5 +592,32 @@ impl Drop for RuntimeHarness {
         if let Some(server) = self.server.take() {
             let _ = server.join();
         }
+        if let Some(reaper) = self.reaper.take() {
+            let _ = reaper.join();
+        }
     }
+}
+
+fn spawn_test_reaper(
+    dispatcher: Dispatcher,
+    sessions: Arc<SessionManager>,
+    shutdown: Arc<AtomicBool>,
+    reaper_tick: Duration,
+    session_ttl: Duration,
+) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        while !shutdown.load(Ordering::SeqCst) {
+            dispatcher.reap_expired_pending();
+            sessions.reap_disconnected(session_ttl);
+            let sleep_for = dispatcher
+                .next_pending_deadline()
+                .map(|deadline| {
+                    deadline
+                        .saturating_duration_since(Instant::now())
+                        .min(reaper_tick)
+                })
+                .unwrap_or(reaper_tick);
+            thread::sleep(sleep_for);
+        }
+    })
 }

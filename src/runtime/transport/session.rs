@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SessionId(u64);
@@ -93,6 +93,41 @@ impl SessionManager {
             session.state = SessionState::Disconnected;
             session.transport.disconnected_at = Some(SystemTime::now());
         }
+    }
+
+    pub fn reap_disconnected(&self, ttl: Duration) -> Vec<SessionId> {
+        let now = SystemTime::now();
+        let mut sessions = self
+            .sessions
+            .lock()
+            .expect("session manager mutex poisoned");
+        let expired = sessions
+            .iter()
+            .filter_map(|(id, session)| {
+                if session.state != SessionState::Disconnected {
+                    return None;
+                }
+
+                let disconnected_at = session.transport.disconnected_at?;
+                let disconnected_for = now.duration_since(disconnected_at).ok()?;
+                (disconnected_for >= ttl).then_some(*id)
+            })
+            .collect::<Vec<_>>();
+
+        for id in &expired {
+            sessions.remove(id);
+        }
+        drop(sessions);
+
+        let mut outbound = self
+            .outbound
+            .lock()
+            .expect("session manager outbound mutex poisoned");
+        for id in &expired {
+            outbound.remove(id);
+        }
+
+        expired
     }
 
     pub fn touch(&self, id: SessionId) {
@@ -214,6 +249,19 @@ mod tests {
         assert_eq!(session.state, SessionState::Disconnected);
         assert!(session.transport.disconnected_at.is_some());
         assert_eq!(manager.connected_count(), 0);
+    }
+
+    #[test]
+    fn reap_disconnected_removes_expired_sessions() {
+        let manager = SessionManager::default();
+        let id = manager.register(None);
+        manager.mark_disconnected(id);
+
+        assert_eq!(
+            manager.reap_disconnected(Duration::from_millis(0)),
+            vec![id]
+        );
+        assert_eq!(manager.count(), 0);
     }
 
     #[test]

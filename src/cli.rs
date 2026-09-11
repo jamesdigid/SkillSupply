@@ -13,7 +13,7 @@ use crate::manifest::{CapabilityManifest, WorkspaceManifest};
 use crate::resolver::{DependencyResolver, PetgraphDependencyResolver};
 use crate::runtime::config::RuntimeConfig;
 use crate::storage::{CapabilitySource, FilesystemCapabilityLoader};
-use crate::utils::paths::WORKSPACE_FILENAME;
+use crate::utils::paths::{WORKSPACE_DOC_FILENAME, WORKSPACE_FILENAME, caps_dir_for};
 
 #[derive(Debug, Clone)]
 struct ValidationRow {
@@ -54,7 +54,7 @@ enum Commands {
     },
     Graph,
     Search,
-    /// Start the local Epistem developer runtime.
+    /// Start the local SkillSupport developer runtime.
     Dev {
         /// Path to a TOML config file with a [runtime] section.
         #[arg(long)]
@@ -120,7 +120,7 @@ fn dev(
     .with_host(host)
     .with_port(port);
 
-    println!("Epistem Runtime\n");
+    println!("SkillSupport Runtime\n");
     println!("Transport: {}\n", config.transport_url());
     println!("Waiting for capabilities...");
 
@@ -141,7 +141,7 @@ fn init(target_dir: Option<PathBuf>) -> crate::error::Result<()> {
         None => cwd.clone(),
     };
 
-    let caps_dir = target_dir.join("caps");
+    let caps_dir = caps_dir_for(&target_dir);
     fs::create_dir_all(&caps_dir)?;
 
     let workspace_name = target_dir
@@ -149,7 +149,7 @@ fn init(target_dir: Option<PathBuf>) -> crate::error::Result<()> {
         .and_then(|value| value.to_str())
         .unwrap_or("skillsupport-workspace");
     let manifest_path = target_dir.join(WORKSPACE_FILENAME);
-    let workspace_doc_path = target_dir.join("SKILLSUPPORT.md");
+    let workspace_doc_path = target_dir.join(WORKSPACE_DOC_FILENAME);
 
     let workspace = WorkspaceManifest {
         name: workspace_name.to_string(),
@@ -158,7 +158,7 @@ fn init(target_dir: Option<PathBuf>) -> crate::error::Result<()> {
     };
 
     let workspace_doc = concat!(
-        "# SkillSupport Workspace\n\n",
+        "# Caps Workspace\n\n",
         "This directory was initialized by `caps init`.\n\n",
         "Installed capabilities live under `caps/`.\n\n",
         "## Next Steps\n\n",
@@ -278,17 +278,21 @@ fn rows_from_fields(
 
 fn print_installed_capability_graph() -> crate::error::Result<()> {
     let cwd = env::current_dir()?;
-    let capabilities_dir = cwd.join("capabilities");
-    if !capabilities_dir.exists() {
+    let caps_dir = caps_dir_for(&cwd);
+    if !caps_dir.exists() {
         println!("no installed capabilities found");
         return Ok(());
     }
 
     let loader = FilesystemCapabilityLoader::default();
     let mut manifests = Vec::new();
-    for entry in fs::read_dir(&capabilities_dir)? {
+    for entry in fs::read_dir(&caps_dir)? {
         let entry = entry?;
         if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        // Skips the provider staging area and any other bookkeeping directory.
+        if entry.file_name().to_string_lossy().starts_with('.') {
             continue;
         }
         if let Ok(capability) = loader.load(&entry.path()) {
@@ -424,8 +428,8 @@ mod tests {
 
     fn assert_scaffold(target_dir: &Path) {
         let manifest_path = target_dir.join(WORKSPACE_FILENAME);
-        let workspace_doc_path = target_dir.join("SKILLSUPPORT.md");
-        let caps_dir = target_dir.join("caps");
+        let workspace_doc_path = target_dir.join(WORKSPACE_DOC_FILENAME);
+        let caps_dir = caps_dir_for(target_dir);
 
         assert!(manifest_path.exists());
         assert!(workspace_doc_path.exists());
