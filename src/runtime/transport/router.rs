@@ -6,7 +6,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::VERSION;
-use crate::error::JSON_RPC_REGISTRATION_CONFLICT;
+use crate::contract::{ContractSha, ContractStore};
+use crate::error::{
+    JSON_RPC_CONTRACT_MISMATCH, JSON_RPC_DANGLING_CONTRACT_REF, JSON_RPC_REGISTRATION_CONFLICT,
+    JSON_RPC_UNKNOWN_CONTRACT,
+};
 use crate::runtime::lifecycle::{LifecycleBus, LifecycleEvent};
 use crate::runtime::services::registry::{
     CapabilityRegistration, CapabilityRegistryError, RuntimeCapabilityRegistry,
@@ -174,6 +178,7 @@ pub fn register_runtime_methods(
     router: &mut Router,
     sessions: Arc<SessionManager>,
     registry: Arc<RuntimeCapabilityRegistry>,
+    contract_store: Arc<dyn ContractStore>,
     lifecycle: Arc<LifecycleBus>,
     started_at: Instant,
 ) {
@@ -197,13 +202,18 @@ pub fn register_runtime_methods(
     });
 
     let register_registry = Arc::clone(&registry);
+    let register_contract_store = Arc::clone(&contract_store);
     let register_lifecycle = Arc::clone(&lifecycle);
     router.register("runtime.register", move |context| {
         let params = context.request.params.unwrap_or(Value::Null);
         let registration = serde_json::from_value::<CapabilityRegistration>(params)
             .map_err(|error| JsonRpcError::invalid_params(error.to_string()))?;
         let registered = register_registry
-            .register(context.caller, registration)
+            .register(
+                context.caller,
+                registration,
+                register_contract_store.as_ref(),
+            )
             .map_err(registry_error_to_json_rpc)?;
 
         register_lifecycle.emit(LifecycleEvent::CapabilityRegistered {
@@ -255,11 +265,53 @@ pub fn register_runtime_methods(
             "capabilities": methods_registry.list(),
         }))
     });
+
+    #[cfg(debug_assertions)]
+    {
+        let contracts_store = Arc::clone(&contract_store);
+        router.register("runtime.contracts", move |_| {
+            let contracts = contracts_store.list().map_err(|error| {
+                JsonRpcError::server_error(JSON_RPC_CONTRACT_MISMATCH, error.to_string())
+            })?;
+            Ok(serde_json::json!({
+                "count": contracts.len(),
+                "contracts": contracts,
+            }))
+        });
+    }
+
+    let contract_store = Arc::clone(&contract_store);
+    router.register("runtime.contract", move |context| {
+        let params = context.request.params.unwrap_or(Value::Null);
+        let params = serde_json::from_value::<ContractParams>(params)
+            .map_err(|error| JsonRpcError::invalid_params(error.to_string()))?;
+        let Some(contract) = contract_store.get(&params.sha).map_err(|error| {
+            JsonRpcError::server_error(JSON_RPC_CONTRACT_MISMATCH, error.to_string())
+        })?
+        else {
+            return Err(JsonRpcError::server_error(
+                JSON_RPC_UNKNOWN_CONTRACT,
+                format!("unknown contract sha: {}", params.sha),
+            ));
+        };
+
+        serde_json::to_value(contract).map_err(|error| {
+            JsonRpcError::server_error(
+                JSON_RPC_CONTRACT_MISMATCH,
+                format!("failed to serialize contract: {error}"),
+            )
+        })
+    });
 }
 
 #[derive(Debug, Deserialize)]
 struct UnregisterParams {
     capability: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ContractParams {
+    sha: ContractSha,
 }
 
 pub fn parse_message(value: Value) -> std::result::Result<JsonRpcMessage, JsonRpcError> {
@@ -317,7 +369,13 @@ pub fn parse_response(value: Value) -> std::result::Result<JsonRpcResponse, Json
 }
 
 fn registry_error_to_json_rpc(error: CapabilityRegistryError) -> JsonRpcError {
-    JsonRpcError::server_error(JSON_RPC_REGISTRATION_CONFLICT, error.to_string())
+    let code = match error {
+        CapabilityRegistryError::ContractMismatch(_) => JSON_RPC_CONTRACT_MISMATCH,
+        CapabilityRegistryError::UnknownContract(_) => JSON_RPC_UNKNOWN_CONTRACT,
+        CapabilityRegistryError::DanglingContractRef(_) => JSON_RPC_DANGLING_CONTRACT_REF,
+        _ => JSON_RPC_REGISTRATION_CONFLICT,
+    };
+    JsonRpcError::server_error(code, error.to_string())
 }
 
 #[cfg(test)]

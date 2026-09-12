@@ -180,5 +180,6 @@ fn copy_dir_all(source: &Path, destination: &Path) -> Result<()> {
 }
 
 fn github_base_url() -> String {
-    std::env::var("EPISTEM_GITHUB_BASE_URL").unwrap_or_else(|_| "https://github.com".to_string())
+    std::env::var("SKILLSUPPORT_GITHUB_BASE_URL")
+        .unwrap_or_else(|_| "https://github.com".to_string())
 }
