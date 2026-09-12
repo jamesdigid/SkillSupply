@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -10,8 +10,8 @@ use self::config::RuntimeConfig;
 use self::lifecycle::{LifecycleBus, LifecycleEvent, NotificationBroadcaster};
 use self::services::registry::RuntimeCapabilityRegistry;
 use self::transport::{
-    register_runtime_methods, Dispatcher, PendingRequests, Router, SessionManager,
-    WebSocketTransport,
+    Dispatcher, PendingRequests, Router, SessionManager, WebSocketTransport,
+    register_runtime_methods,
 };
 
 #[path = "caps/mod.rs"]

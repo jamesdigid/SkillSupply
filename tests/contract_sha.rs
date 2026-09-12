@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use serde_json::json;
 use skillsupport::contract::{
-    canonical_bytes, Contract, ContractSha, ContractStore, ContractStoreError, ExecutionMode,
-    FilesystemContractStore,
+    Contract, ContractSha, ContractStore, ContractStoreError, ExecutionMode,
+    FilesystemContractStore, canonical_bytes,
 };
 
 fn contract(name: &str) -> Contract {

@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -11,12 +11,12 @@ use skillsupport::runtime::config::{RuntimeConfig, TransportKind};
 use skillsupport::runtime::lifecycle::{LifecycleBus, NotificationBroadcaster};
 use skillsupport::runtime::services::registry::RuntimeCapabilityRegistry;
 use skillsupport::runtime::transport::{
-    register_runtime_methods, Dispatcher, PendingRequests, Router, SessionManager,
-    WebSocketTransport,
+    Dispatcher, PendingRequests, Router, SessionManager, WebSocketTransport,
+    register_runtime_methods,
 };
 use tempfile::TempDir;
 use tungstenite::stream::MaybeTlsStream;
-use tungstenite::{connect, Message};
+use tungstenite::{Message, connect};
 
 #[test]
 fn runtime_serve_wires_builtin_methods() {
@@ -304,6 +304,16 @@ fn contract_registration_hydrates_and_reconnects_by_sha() {
     );
     assert_eq!(hydrated["result"]["name"], Value::from("browser.navigate"));
 
+    #[cfg(debug_assertions)]
+    {
+        let contracts = request(&mut caller, "runtime.contracts", None, 26);
+        assert_eq!(contracts["result"]["count"], Value::from(1));
+        assert_eq!(
+            contracts["result"]["contracts"][0],
+            Value::from(contract_sha.clone())
+        );
+    }
+
     capability.close(None).expect("close capability");
     let _ = read_until_method(&mut caller, "lifecycle.capability_unregistered");
 
@@ -359,6 +369,47 @@ fn unknown_contract_sha_is_rejected() {
     );
 
     assert_eq!(response["error"]["code"], Value::from(-32009));
+    runtime.shutdown();
+}
+
+#[test]
+fn dangling_contract_ref_is_rejected() {
+    let runtime = RuntimeHarness::spawn(Duration::from_secs(2));
+    let mut capability = runtime.connect();
+
+    let response = request(
+        &mut capability,
+        "runtime.register",
+        Some(serde_json::json!({
+            "capability": "browser",
+            "methods": [
+                {
+                    "name": "browser.navigate",
+                    "contract": {
+                        "name": "browser.navigate",
+                        "version": "1.0.0",
+                        "summary": "Navigate the active browser tab to a URL.",
+                        "params": {
+                            "type": "object",
+                            "properties": {
+                                "url": { "type": "string" }
+                            }
+                        },
+                        "result": {
+                            "type": "object"
+                        },
+                        "refs": [
+                            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        ]
+                    }
+                }
+            ],
+            "version": "1.0.0",
+        })),
+        28,
+    );
+
+    assert_eq!(response["error"]["code"], Value::from(-32010));
     runtime.shutdown();
 }
 

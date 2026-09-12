@@ -4,7 +4,7 @@ use crate::manifest::models::{
     CapabilityManifest, InstallSpec, ReadyProbe, RuntimeSpec, RuntimeType, TestSuitePaths,
 };
 use crate::manifest::parser::{ManifestParser, YamlManifestParser};
-use crate::utils::paths::{manifest_path_for, MANIFEST_FILENAME};
+use crate::utils::paths::{MANIFEST_FILENAME, manifest_path_for};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidationIssue {

@@ -4,13 +4,15 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::contract::{canonical_bytes, Contract, ContractSha};
+use crate::contract::{Contract, ContractSha, canonical_bytes};
 use crate::utils::paths::contracts_dir_for;
 
 pub trait ContractStore: Send + Sync {
     fn insert(&self, contract: &Contract) -> std::result::Result<ContractSha, ContractStoreError>;
 
     fn get(&self, sha: &ContractSha) -> std::result::Result<Option<Contract>, ContractStoreError>;
+
+    fn list(&self) -> std::result::Result<Vec<ContractSha>, ContractStoreError>;
 
     fn contains(&self, sha: &ContractSha) -> std::result::Result<bool, ContractStoreError> {
         self.get(sha).map(|contract| contract.is_some())
@@ -99,6 +101,45 @@ impl ContractStore for FilesystemContractStore {
 
         let data = fs::read_to_string(path)?;
         Ok(Some(serde_json::from_str(&data)?))
+    }
+
+    fn list(&self) -> std::result::Result<Vec<ContractSha>, ContractStoreError> {
+        let sha_root = self.root.join("sha256");
+        if !sha_root.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut contracts = Vec::new();
+        for shard in fs::read_dir(sha_root)? {
+            let shard = shard?;
+            if !shard.file_type()?.is_dir() {
+                continue;
+            }
+            let prefix = shard.file_name().to_string_lossy().to_string();
+            if prefix.len() != 2 {
+                continue;
+            }
+
+            for entry in fs::read_dir(shard.path())? {
+                let entry = entry?;
+                if !entry.file_type()?.is_file() {
+                    continue;
+                }
+                if entry.path().extension().and_then(|value| value.to_str()) != Some("json") {
+                    continue;
+                }
+                let path = entry.path();
+                let Some(stem) = path.file_stem().and_then(|value| value.to_str()) else {
+                    continue;
+                };
+                let sha = ContractSha::new(format!("{prefix}{stem}"))
+                    .map_err(|error| ContractStoreError::Other(error.to_string()))?;
+                contracts.push(sha);
+            }
+        }
+
+        contracts.sort();
+        Ok(contracts)
     }
 }
 

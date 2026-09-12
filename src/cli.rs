@@ -434,12 +434,7 @@ mod tests {
         assert!(manifest_path.exists());
         assert!(workspace_doc_path.exists());
         assert!(caps_dir.exists());
-        assert!(
-            fs::read_dir(&caps_dir)
-                .expect("caps dir")
-                .next()
-                .is_none()
-        );
+        assert!(fs::read_dir(&caps_dir).expect("caps dir").next().is_none());
 
         let manifest = fs::read_to_string(manifest_path).expect("manifest");
         assert!(manifest.contains("version: 0.1.0"));

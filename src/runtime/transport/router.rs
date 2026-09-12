@@ -5,6 +5,7 @@ use std::time::Instant;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::VERSION;
 use crate::contract::{ContractSha, ContractStore};
 use crate::error::{
     JSON_RPC_CONTRACT_MISMATCH, JSON_RPC_DANGLING_CONTRACT_REF, JSON_RPC_REGISTRATION_CONFLICT,
@@ -15,7 +16,6 @@ use crate::runtime::services::registry::{
     CapabilityRegistration, CapabilityRegistryError, RuntimeCapabilityRegistry,
 };
 use crate::runtime::transport::session::SessionId;
-use crate::VERSION;
 
 use super::session::SessionManager;
 
@@ -265,6 +265,20 @@ pub fn register_runtime_methods(
             "capabilities": methods_registry.list(),
         }))
     });
+
+    #[cfg(debug_assertions)]
+    {
+        let contracts_store = Arc::clone(&contract_store);
+        router.register("runtime.contracts", move |_| {
+            let contracts = contracts_store.list().map_err(|error| {
+                JsonRpcError::server_error(JSON_RPC_CONTRACT_MISMATCH, error.to_string())
+            })?;
+            Ok(serde_json::json!({
+                "count": contracts.len(),
+                "contracts": contracts,
+            }))
+        });
+    }
 
     let contract_store = Arc::clone(&contract_store);
     router.register("runtime.contract", move |context| {

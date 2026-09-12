@@ -186,6 +186,29 @@ They hydrate a full contract only when needed:
 
 The caller or client library should cache hydrated contracts by SHA.
 
+For a runnable local walkthrough, start the runtime in one terminal:
+
+```bash
+caps dev
+```
+
+Then run the example in another:
+
+```bash
+cargo run --example contract-roundtrip
+```
+
+The example publishes a full contract, hydrates it with `runtime.contract`,
+reconnects, and registers again with `name` plus `contract_sha` only.
+
+Debug builds also expose a light inspection method:
+
+```json
+{ "jsonrpc": "2.0", "method": "runtime.contracts", "id": 5 }
+```
+
+It returns only a count and the stored SHAs. It is absent from release builds.
+
 ## 6. Handle Calls At The IO Surface
 
 When another session invokes `browser.navigate`, the runtime forwards the
@@ -252,6 +275,7 @@ Implemented now:
 - Canonical SHA computation and storage under `caps/.contracts/`.
 - SHA-only reconnect registration.
 - `runtime.contract` hydration.
+- Debug-only `runtime.contracts` SHA inspection.
 - Compact method refs from `runtime.methods` and lifecycle notifications.
 
 Not implemented yet:

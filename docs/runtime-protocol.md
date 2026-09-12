@@ -229,6 +229,25 @@ Returns registered capabilities and their methods:
 }
 ```
 
+### `runtime.contracts`
+
+Debug-only. Registered only in debug builds with `#[cfg(debug_assertions)]`; absent
+from release builds.
+
+Returns the contract SHAs currently stored by the local runtime:
+
+```json
+{
+  "count": 1,
+  "contracts": [
+    "sha256:f62c3e0502dba35ac5b09003a419b8df6f58f967f393a83b3edb879a6946ed0f"
+  ]
+}
+```
+
+This method is intentionally light: it returns SHAs only, not hydrated contract bodies.
+Use `runtime.contract` to hydrate a specific contract.
+
 ## Method Contracts
 
 CAPS contracts are content-addressed and immutable. Registration returns compact method

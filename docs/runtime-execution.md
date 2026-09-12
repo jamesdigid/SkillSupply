@@ -57,6 +57,10 @@ after:  1 accept thread + N connection threads + 1 pending reaper thread
 Inbound frames are processed inline on their connection thread. That restores per-session
 ordering and removes the fanout failure mode.
 
+Provider runtimes launched during `caps learn` are child processes. They are reaped both
+on explicit `RuntimeSession::shutdown` and from `RuntimeSession::drop`, so early returns
+from readiness or verification failures do not leave live children or zombies behind.
+
 ## Pending Reaper
 
 A single reaper thread handles timeout and cleanup work:

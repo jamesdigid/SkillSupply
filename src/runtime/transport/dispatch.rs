@@ -11,8 +11,8 @@ use crate::runtime::services::registry::RuntimeCapabilityRegistry;
 
 use super::pending::{PendingForward, PendingRequests};
 use super::router::{
-    parse_message, JsonRpcError, JsonRpcMessage, JsonRpcRequest, JsonRpcResponse, MethodContext,
-    Router,
+    JsonRpcError, JsonRpcMessage, JsonRpcRequest, JsonRpcResponse, MethodContext, Router,
+    parse_message,
 };
 use super::session::{SessionId, SessionManager};
 
