@@ -11,7 +11,7 @@ use crate::provider::{
 use crate::reasoning::{CandidateProvider, DeterministicSelector, ProviderSelector};
 use crate::registry::RegistryIndex;
 use crate::runtime::capabilities::RuntimeController;
-use crate::utils::paths::{WORKSPACE_FILENAME, acquired_dir_for, caps_dir_for};
+use crate::utils::paths::{acquired_dir_for, caps_dir_for, WORKSPACE_FILENAME};
 use crate::verification::VerificationRunner;
 
 #[derive(Debug, Clone, Default)]

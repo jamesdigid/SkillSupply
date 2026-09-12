@@ -1,20 +1,22 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
+use skillsupport::contract::FilesystemContractStore;
 use skillsupport::runtime;
 use skillsupport::runtime::config::{RuntimeConfig, TransportKind};
 use skillsupport::runtime::lifecycle::{LifecycleBus, NotificationBroadcaster};
 use skillsupport::runtime::services::registry::RuntimeCapabilityRegistry;
 use skillsupport::runtime::transport::{
-    Dispatcher, PendingRequests, Router, SessionManager, WebSocketTransport,
-    register_runtime_methods,
+    register_runtime_methods, Dispatcher, PendingRequests, Router, SessionManager,
+    WebSocketTransport,
 };
+use tempfile::TempDir;
 use tungstenite::stream::MaybeTlsStream;
-use tungstenite::{Message, connect};
+use tungstenite::{connect, Message};
 
 #[test]
 fn runtime_serve_wires_builtin_methods() {
@@ -247,6 +249,116 @@ fn duplicate_registration_is_rejected() {
     );
 
     assert_eq!(response["error"]["code"], Value::from(-32001));
+    runtime.shutdown();
+}
+
+#[test]
+fn contract_registration_hydrates_and_reconnects_by_sha() {
+    let runtime = RuntimeHarness::spawn(Duration::from_secs(2));
+    let mut caller = runtime.connect();
+    let mut capability = runtime.connect();
+
+    let registered = request(
+        &mut capability,
+        "runtime.register",
+        Some(serde_json::json!({
+            "capability": "browser",
+            "methods": [
+                {
+                    "name": "browser.navigate",
+                    "contract": {
+                        "name": "browser.navigate",
+                        "version": "1.0.0",
+                        "summary": "Navigate the active browser tab to a URL.",
+                        "params": {
+                            "type": "object",
+                            "properties": {
+                                "url": { "type": "string" }
+                            }
+                        },
+                        "result": {
+                            "type": "object"
+                        }
+                    }
+                }
+            ],
+            "version": "1.0.0",
+        })),
+        22,
+    );
+    let contract_sha = registered["result"]["methods"][0]["contract_sha"]
+        .as_str()
+        .expect("contract sha")
+        .to_string();
+    assert!(contract_sha.starts_with("sha256:"));
+    assert_eq!(
+        registered["result"]["methods"][0]["summary"],
+        Value::from("Navigate the active browser tab to a URL.")
+    );
+
+    let hydrated = request(
+        &mut caller,
+        "runtime.contract",
+        Some(serde_json::json!({ "sha": contract_sha.clone() })),
+        23,
+    );
+    assert_eq!(hydrated["result"]["name"], Value::from("browser.navigate"));
+
+    capability.close(None).expect("close capability");
+    let _ = read_until_method(&mut caller, "lifecycle.capability_unregistered");
+
+    let mut capability = runtime.connect();
+    let registered = request(
+        &mut capability,
+        "runtime.register",
+        Some(serde_json::json!({
+            "capability": "browser",
+            "methods": [
+                {
+                    "name": "browser.navigate",
+                    "contract_sha": contract_sha
+                }
+            ],
+            "version": "1.0.0",
+        })),
+        24,
+    );
+    assert_eq!(
+        registered["result"]["methods"][0]["summary"],
+        Value::from("Navigate the active browser tab to a URL.")
+    );
+
+    let methods = request(&mut caller, "runtime.methods", None, 25);
+    assert_eq!(
+        methods["result"]["capabilities"][0]["methods"][0]["contract_sha"],
+        registered["result"]["methods"][0]["contract_sha"]
+    );
+
+    runtime.shutdown();
+}
+
+#[test]
+fn unknown_contract_sha_is_rejected() {
+    let runtime = RuntimeHarness::spawn(Duration::from_secs(2));
+    let mut capability = runtime.connect();
+
+    let response = request(
+        &mut capability,
+        "runtime.register",
+        Some(serde_json::json!({
+            "capability": "browser",
+            "methods": [
+                {
+                    "name": "browser.navigate",
+                    "contract_sha": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                }
+            ],
+            "version": "1.0.0",
+        })),
+        27,
+    );
+
+    assert_eq!(response["error"]["code"], Value::from(-32009));
     runtime.shutdown();
 }
 
@@ -508,12 +620,15 @@ struct RuntimeHarness {
     server: Option<thread::JoinHandle<()>>,
     reaper: Option<thread::JoinHandle<()>>,
     sessions: Arc<SessionManager>,
+    _workspace: TempDir,
 }
 
 impl RuntimeHarness {
     fn spawn(forward_timeout: Duration) -> Self {
         let sessions = Arc::new(SessionManager::default());
         let registry = Arc::new(RuntimeCapabilityRegistry::default());
+        let workspace = tempfile::tempdir().expect("temp workspace");
+        let contract_store = Arc::new(FilesystemContractStore::new(workspace.path()));
         let pending = Arc::new(PendingRequests::default());
         let lifecycle = Arc::new(LifecycleBus::default());
         lifecycle.register(Arc::new(NotificationBroadcaster::new(Arc::clone(
@@ -525,6 +640,7 @@ impl RuntimeHarness {
             &mut router,
             Arc::clone(&sessions),
             Arc::clone(&registry),
+            contract_store,
             Arc::clone(&lifecycle),
             Instant::now(),
         );
@@ -562,6 +678,7 @@ impl RuntimeHarness {
             server: Some(server),
             reaper: Some(reaper),
             sessions,
+            _workspace: workspace,
         }
     }
 

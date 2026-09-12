@@ -4,6 +4,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
+use crate::contract::{Contract, ContractSha, ContractStore, ContractStoreError};
 use crate::runtime::transport::SessionId;
 
 pub trait ServiceRegistry {}
@@ -13,15 +14,46 @@ pub trait CapabilityRegistry {}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CapabilityRegistration {
     pub capability: String,
-    pub methods: Vec<String>,
+    pub methods: Vec<MethodRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum MethodRef {
+    Name(String),
+    Declared {
+        name: String,
+        contract: Contract,
+    },
+    Referenced {
+        name: String,
+        contract_sha: ContractSha,
+    },
+}
+
+impl MethodRef {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Name(name) | Self::Declared { name, .. } | Self::Referenced { name, .. } => name,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RegisteredMethod {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contract_sha: Option<ContractSha>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RegisteredCapability {
     pub capability: String,
-    pub methods: Vec<String>,
+    pub methods: Vec<RegisteredMethod>,
     #[serde(skip)]
     pub session_id: SessionId,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -32,6 +64,7 @@ pub struct RegisteredCapability {
 pub struct MethodOwner {
     pub capability: String,
     pub session_id: SessionId,
+    pub contract_sha: Option<ContractSha>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +75,9 @@ pub enum CapabilityRegistryError {
     ReservedMethod(String),
     CapabilityAlreadyRegistered(String),
     MethodAlreadyRegistered(String),
+    ContractMismatch(String),
+    UnknownContract(String),
+    DanglingContractRef(String),
 }
 
 impl Display for CapabilityRegistryError {
@@ -57,6 +93,9 @@ impl Display for CapabilityRegistryError {
             Self::MethodAlreadyRegistered(method) => {
                 write!(f, "method already registered: {method}")
             }
+            Self::ContractMismatch(message)
+            | Self::UnknownContract(message)
+            | Self::DanglingContractRef(message) => f.write_str(message),
         }
     }
 }
@@ -72,8 +111,15 @@ impl RuntimeCapabilityRegistry {
         &self,
         session_id: SessionId,
         registration: CapabilityRegistration,
+        contract_store: &dyn ContractStore,
     ) -> Result<RegisteredCapability, CapabilityRegistryError> {
         validate_registration(&registration)?;
+
+        let registered_methods = registration
+            .methods
+            .iter()
+            .map(|method| resolve_method_ref(&registration.capability, method, contract_store))
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         let mut capabilities = self
             .capabilities
@@ -90,27 +136,28 @@ impl RuntimeCapabilityRegistry {
             ));
         }
 
-        for method in &registration.methods {
-            if methods.contains_key(method) {
+        for method in &registered_methods {
+            if methods.contains_key(&method.name) {
                 return Err(CapabilityRegistryError::MethodAlreadyRegistered(
-                    method.clone(),
+                    method.name.clone(),
                 ));
             }
         }
 
         let registered = RegisteredCapability {
             capability: registration.capability,
-            methods: registration.methods,
+            methods: registered_methods,
             session_id,
             version: registration.version,
         };
 
         for method in &registered.methods {
             methods.insert(
-                method.clone(),
+                method.name.clone(),
                 MethodOwner {
                     capability: registered.capability.clone(),
                     session_id,
+                    contract_sha: method.contract_sha.clone(),
                 },
             );
         }
@@ -140,7 +187,7 @@ impl RuntimeCapabilityRegistry {
             .filter_map(|name| capabilities.remove(&name))
             .inspect(|capability| {
                 for method in &capability.methods {
-                    methods.remove(method);
+                    methods.remove(&method.name);
                 }
             })
             .collect()
@@ -167,7 +214,7 @@ impl RuntimeCapabilityRegistry {
 
         let registered = capabilities.remove(capability)?;
         for method in &registered.methods {
-            methods.remove(method);
+            methods.remove(&method.name);
         }
         Some(registered)
     }
@@ -210,25 +257,85 @@ fn validate_registration(
 
     let mut seen = HashSet::new();
     for method in &registration.methods {
-        if method.starts_with("runtime.") || method.starts_with("lifecycle.") {
-            return Err(CapabilityRegistryError::ReservedMethod(method.clone()));
+        let name = method.name();
+        if name.starts_with("runtime.") || name.starts_with("lifecycle.") {
+            return Err(CapabilityRegistryError::ReservedMethod(name.to_string()));
         }
-        if !seen.insert(method.clone()) {
-            return Err(CapabilityRegistryError::DuplicateMethod(method.clone()));
+        if !seen.insert(name.to_string()) {
+            return Err(CapabilityRegistryError::DuplicateMethod(name.to_string()));
         }
     }
 
     Ok(())
 }
 
+fn resolve_method_ref(
+    _capability: &str,
+    method: &MethodRef,
+    contract_store: &dyn ContractStore,
+) -> Result<RegisteredMethod, CapabilityRegistryError> {
+    match method {
+        MethodRef::Name(name) => Ok(RegisteredMethod {
+            name: name.clone(),
+            contract_sha: None,
+            summary: None,
+        }),
+        MethodRef::Declared { name, contract } => {
+            let contract_sha = contract_store
+                .insert(contract)
+                .map_err(registry_error_from_contract_store)?;
+            Ok(RegisteredMethod {
+                name: name.clone(),
+                contract_sha: Some(contract_sha),
+                summary: contract.summary.clone(),
+            })
+        }
+        MethodRef::Referenced { name, contract_sha } => {
+            let contract = contract_store
+                .get(contract_sha)
+                .map_err(registry_error_from_contract_store)?
+                .ok_or_else(|| {
+                    CapabilityRegistryError::UnknownContract(format!(
+                        "unknown contract sha: {contract_sha}; re-register with the full body"
+                    ))
+                })?;
+            Ok(RegisteredMethod {
+                name: name.clone(),
+                contract_sha: Some(contract_sha.clone()),
+                summary: contract.summary,
+            })
+        }
+    }
+}
+
+fn registry_error_from_contract_store(error: ContractStoreError) -> CapabilityRegistryError {
+    match error {
+        ContractStoreError::Mismatch { .. } => {
+            CapabilityRegistryError::ContractMismatch(error.to_string())
+        }
+        ContractStoreError::Unknown { .. } => {
+            CapabilityRegistryError::UnknownContract(error.to_string())
+        }
+        ContractStoreError::DanglingRef { .. } => {
+            CapabilityRegistryError::DanglingContractRef(error.to_string())
+        }
+        error => CapabilityRegistryError::ContractMismatch(error.to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contract::FilesystemContractStore;
+    use tempfile::tempdir;
 
     fn registration(methods: &[&str]) -> CapabilityRegistration {
         CapabilityRegistration {
             capability: "math".to_string(),
-            methods: methods.iter().map(|method| method.to_string()).collect(),
+            methods: methods
+                .iter()
+                .map(|method| MethodRef::Name(method.to_string()))
+                .collect(),
             version: Some("1.0.0".to_string()),
         }
     }
@@ -236,10 +343,12 @@ mod tests {
     #[test]
     fn registers_and_resolves_method_owner() {
         let registry = RuntimeCapabilityRegistry::default();
+        let tempdir = tempdir().expect("temp dir");
+        let store = FilesystemContractStore::new(tempdir.path());
         let session_id = SessionId::new(1);
 
         registry
-            .register(session_id, registration(&["math.add"]))
+            .register(session_id, registration(&["math.add"]), &store)
             .expect("register capability");
 
         assert_eq!(
@@ -247,6 +356,7 @@ mod tests {
             Some(MethodOwner {
                 capability: "math".to_string(),
                 session_id,
+                contract_sha: None,
             })
         );
     }
@@ -254,8 +364,10 @@ mod tests {
     #[test]
     fn rejects_method_conflicts() {
         let registry = RuntimeCapabilityRegistry::default();
+        let tempdir = tempdir().expect("temp dir");
+        let store = FilesystemContractStore::new(tempdir.path());
         registry
-            .register(SessionId::new(1), registration(&["math.add"]))
+            .register(SessionId::new(1), registration(&["math.add"]), &store)
             .expect("first registration");
 
         let error = registry
@@ -263,9 +375,10 @@ mod tests {
                 SessionId::new(2),
                 CapabilityRegistration {
                     capability: "other".to_string(),
-                    methods: vec!["math.add".to_string()],
+                    methods: vec![MethodRef::Name("math.add".to_string())],
                     version: None,
                 },
+                &store,
             )
             .expect_err("conflict");
 
@@ -278,9 +391,11 @@ mod tests {
     #[test]
     fn unregister_session_releases_methods() {
         let registry = RuntimeCapabilityRegistry::default();
+        let tempdir = tempdir().expect("temp dir");
+        let store = FilesystemContractStore::new(tempdir.path());
         let session_id = SessionId::new(1);
         registry
-            .register(session_id, registration(&["math.add"]))
+            .register(session_id, registration(&["math.add"]), &store)
             .expect("register capability");
 
         let removed = registry.unregister_session(session_id);

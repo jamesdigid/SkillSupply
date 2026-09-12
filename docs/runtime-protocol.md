@@ -9,13 +9,13 @@ Binary WebSocket frames are ignored.
 
 ## Implementation Status
 
-Implemented today: session management, capability registration by method name, the
-built-in `runtime.*` methods, request forwarding with id rewriting, forward timeouts, and
-lifecycle notifications.
+Implemented today: session management, capability registration by method name or
+contract reference, contract SHA storage and hydration, the built-in `runtime.*`
+methods, request forwarding with id rewriting, forward timeouts, and lifecycle
+notifications.
 
-Designed but not implemented: contract SHAs and `runtime.contract` hydration, method refs
-carrying `contract_sha`, execution modes, jobs, progress, and cancellation. Registration
-currently accepts plain method-name strings.
+Designed but not implemented: execution modes, jobs, progress, cancellation, and
+opaque grant handles for scoped invocation.
 
 ## Connection Flow
 
@@ -53,7 +53,7 @@ reaper_tick_ms = 50
 session_ttl_ms = 300000
 ```
 
-3. Register the capability with compact method references:
+3. Register the capability with full contracts the first time they are published:
 
 ```json
 {
@@ -65,13 +65,24 @@ session_ttl_ms = 300000
     "methods": [
       {
         "name": "browser.navigate",
-        "contract_sha": "sha256:1e8f6c4c...",
-        "summary": "Navigate the active browser tab to a URL."
+        "contract": {
+          "name": "browser.navigate",
+          "version": "1.0.0",
+          "summary": "Navigate the active browser tab to a URL.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "url": { "type": "string" }
+            }
+          },
+          "result": {
+            "type": "object"
+          }
+        }
       },
       {
         "name": "browser.screenshot",
-        "contract_sha": "sha256:7aa2f093...",
-        "summary": "Capture a screenshot of the active browser tab."
+        "contract_sha": "sha256:7aa2f093..."
       }
     ]
   },
@@ -144,7 +155,7 @@ Returns runtime health, uptime, connected session count, and registered capabili
 
 ### `runtime.register`
 
-Registers the caller's capability and contributed method references.
+Registers the caller's capability and contributed methods.
 
 Params:
 
@@ -155,8 +166,20 @@ Params:
   "methods": [
     {
       "name": "browser.navigate",
-      "contract_sha": "sha256:1e8f6c4c...",
-      "summary": "Navigate the active browser tab to a URL."
+        "contract": {
+          "name": "browser.navigate",
+          "version": "1.0.0",
+          "summary": "Navigate the active browser tab to a URL.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "url": { "type": "string" }
+            }
+          },
+          "result": {
+            "type": "object"
+          }
+        }
     }
   ]
 }
@@ -165,7 +188,9 @@ Params:
 Rules:
 
 - Method names must be unique across all connected capabilities.
-- Each method reference points at an immutable contract by `contract_sha`.
+- A method can be a legacy string name, a full contract body, or a `{ "name", "contract_sha" }`
+  reference to a contract already stored by the runtime.
+- Contract refs point at immutable content by `contract_sha`.
 - `runtime.*` and `lifecycle.*` are reserved prefixes.
 - Registrations are tied to the current session and removed automatically on disconnect.
 - A session cannot invoke methods registered by that same session.
@@ -231,16 +256,84 @@ Contract hydration:
 }
 ```
 
-The SHA is computed over canonical contract content, not formatting noise such as
-whitespace or object key order. Equivalent canonical contracts share a SHA; semantic
-contract changes produce a new SHA.
+First registration publishes the full contract body:
+
+```json
+{
+  "name": "browser.navigate",
+  "contract": {
+    "name": "browser.navigate",
+    "version": "1.0.0",
+    "summary": "Navigate the active browser tab to a URL.",
+    "params": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" }
+      }
+    },
+    "result": {
+      "type": "object"
+    }
+  }
+}
+```
+
+The runtime canonicalizes the contract, stores it in `caps/.contracts/`, and returns:
+
+```json
+{
+  "name": "browser.navigate",
+  "contract_sha": "sha256:1e8f6c4c...",
+  "summary": "Navigate the active browser tab to a URL."
+}
+```
+
+Later registrations can use only the SHA:
+
+```json
+{
+  "name": "browser.navigate",
+  "contract_sha": "sha256:1e8f6c4c..."
+}
+```
+
+If the SHA is unknown, the runtime rejects registration and the capability should
+re-register with the full body.
+
+The SHA is computed over canonical contract content, not formatting noise. Objects are
+serialized with sorted keys and compact JSON, so whitespace and object key order do not
+matter. Equivalent canonical contracts share a SHA; semantic contract changes produce a
+new SHA.
 
 Once published, a contract SHA never points at different content. This keeps agents from
 learning against one contract and later calling a subtly different one under the same id.
 
+Contracts may reference previously stored contracts through `refs`. A registration with
+a dangling `ref` is rejected so contract hydration never returns a pointer the runtime
+cannot resolve.
+
 The LLM should not receive hydrated schemas by default. The agent runtime or client
 library should cache full contracts and expose only a compact calling interface to the
 model.
+
+## Obfuscation and Grants (Design)
+
+Raw contract SHAs are not a security mechanism for hiding skill names. A method name such
+as `browser.navigate` has low entropy, so an attacker can hash likely names and compare
+the output. `contract_sha` is therefore an integrity and cache key only.
+
+The security-oriented version of this idea is an opaque, random grant handle:
+
+```text
+grant: mh_7f3a9c21b8e04d56
+  -> method: browser.navigate
+  -> contract_sha: sha256:1e8f6c4c...
+  -> scope: session or caller
+```
+
+Grant handles would be random, scoped, expiring, and revocable. The runtime would keep
+the mapping internally and callers would invoke the handle rather than the global method
+name. This layer is not implemented yet.
 
 ## Execution Modes
 
@@ -381,6 +474,9 @@ Runtime-specific JSON-RPC errors use the server-error range:
 - `-32005`: unknown job
 - `-32006`: job canceled
 - `-32007`: job orphaned
+- `-32008`: contract mismatch or malformed contract
+- `-32009`: unknown contract SHA
+- `-32010`: dangling contract ref
 
 Standard JSON-RPC errors are also used:
 
@@ -401,7 +497,9 @@ On disconnect, the runtime:
 3. Broadcasts `lifecycle.session_disconnected`.
 
 On reconnect, the capability should call `runtime.register` again. The same method names can
-be reused after the old session is disconnected.
+be reused after the old session is disconnected. If the runtime still has the contract in
+`caps/.contracts/`, the capability can re-register with `{ "name", "contract_sha" }`
+instead of sending the full contract body again.
 
 Jobs outlive sessions, so job ownership is tracked by capability name rather than session
 id. When a capability disconnects:
@@ -429,13 +527,24 @@ Registration:
     "methods": [
       {
         "name": "browser.navigate",
-        "contract_sha": "sha256:1e8f6c4c...",
-        "summary": "Navigate the active browser tab to a URL."
+        "contract": {
+          "name": "browser.navigate",
+          "version": "1.0.0",
+          "summary": "Navigate the active browser tab to a URL.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "url": { "type": "string" }
+            }
+          },
+          "result": {
+            "type": "object"
+          }
+        }
       },
       {
         "name": "browser.screenshot",
-        "contract_sha": "sha256:7aa2f093...",
-        "summary": "Capture a screenshot of the active browser tab."
+        "contract_sha": "sha256:7aa2f093..."
       }
     ]
   },

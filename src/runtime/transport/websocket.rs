@@ -1,12 +1,12 @@
 use std::io::ErrorKind;
 use std::net::{SocketAddr, TcpListener, ToSocketAddrs};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::TryRecvError;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use tungstenite::{Error as WebSocketError, Message, accept};
+use tungstenite::{accept, Error as WebSocketError, Message};
 
 use crate::error::{Result, SkillSupportError};
 

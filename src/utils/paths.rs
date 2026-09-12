@@ -13,6 +13,9 @@ pub const CAPS_DIRNAME: &str = "caps";
 /// Staging area for fetched providers. Lives inside `caps/` so the workspace
 /// root stays clean, and is dot-prefixed so it is not mistaken for a capability.
 pub const ACQUIRED_DIRNAME: &str = ".acquired";
+/// Content-addressed contract store. Lives inside `caps/` next to `.acquired`
+/// so it is not mistaken for an installed capability.
+pub const CONTRACTS_DIRNAME: &str = ".contracts";
 
 pub fn manifest_path_for(capability_root: &Path) -> PathBuf {
     capability_root.join(MANIFEST_FILENAME)
@@ -24,4 +27,8 @@ pub fn caps_dir_for(workspace_root: &Path) -> PathBuf {
 
 pub fn acquired_dir_for(workspace_root: &Path) -> PathBuf {
     caps_dir_for(workspace_root).join(ACQUIRED_DIRNAME)
+}
+
+pub fn contracts_dir_for(workspace_root: &Path) -> PathBuf {
+    caps_dir_for(workspace_root).join(CONTRACTS_DIRNAME)
 }

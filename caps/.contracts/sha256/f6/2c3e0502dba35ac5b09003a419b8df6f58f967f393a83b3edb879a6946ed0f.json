@@ -1,0 +1,1 @@
+{"cancelable":false,"execution":"immediate","name":"browser.navigate","params":{"properties":{"url":{"type":"string"}},"type":"object"},"result":{"type":"object"},"summary":"Navigate to a URL.","version":"1.0.0"}

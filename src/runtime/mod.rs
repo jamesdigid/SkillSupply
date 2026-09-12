@@ -1,16 +1,17 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::contract::FilesystemContractStore;
 use crate::error::Result;
 
 use self::config::RuntimeConfig;
 use self::lifecycle::{LifecycleBus, LifecycleEvent, NotificationBroadcaster};
 use self::services::registry::RuntimeCapabilityRegistry;
 use self::transport::{
-    Dispatcher, PendingRequests, Router, SessionManager, WebSocketTransport,
-    register_runtime_methods,
+    register_runtime_methods, Dispatcher, PendingRequests, Router, SessionManager,
+    WebSocketTransport,
 };
 
 #[path = "caps/mod.rs"]
@@ -23,6 +24,7 @@ pub mod transport;
 pub fn serve(config: &RuntimeConfig, shutdown: Arc<AtomicBool>) -> Result<()> {
     let sessions = Arc::new(SessionManager::default());
     let registry = Arc::new(RuntimeCapabilityRegistry::default());
+    let contract_store = Arc::new(FilesystemContractStore::new(std::env::current_dir()?));
     let pending = Arc::new(PendingRequests::default());
     let lifecycle = Arc::new(LifecycleBus::default());
     lifecycle.register(Arc::new(NotificationBroadcaster::new(Arc::clone(
@@ -34,6 +36,7 @@ pub fn serve(config: &RuntimeConfig, shutdown: Arc<AtomicBool>) -> Result<()> {
         &mut router,
         Arc::clone(&sessions),
         Arc::clone(&registry),
+        contract_store,
         Arc::clone(&lifecycle),
         Instant::now(),
     );
