@@ -88,6 +88,41 @@ cargo install --path . --force
 caps --help
 ```
 
+### Release Recipe
+
+Releases are created from annotated `v*` tags on `main`. The release workflow creates the GitHub release and uploads the `caps` binary archives for Linux and macOS.
+
+Before tagging, make sure `main` is current and clean:
+
+```bash
+git checkout main
+git pull origin main
+git status
+```
+
+Create the annotated tag with release notes that describe the user-facing changes:
+
+```bash
+git tag -a vMAJOR.MINOR.PATCH main \
+  -m "Release vMAJOR.MINOR.PATCH" \
+  -m "Description"
+```
+
+Push the tag to start the release workflow:
+
+```bash
+git push origin vMAJOR.MINOR.PATCH
+```
+
+After the workflow finishes, confirm the release has these assets:
+
+```text
+caps-aarch64-apple-darwin.tar.gz
+caps-aarch64-unknown-linux-gnu.tar.gz
+caps-x86_64-apple-darwin.tar.gz
+caps-x86_64-unknown-linux-gnu.tar.gz
+```
+
 ## Runtime Protocol
 
 External capabilities can connect to `caps dev` over WebSocket JSON-RPC, register their methods, and receive lifecycle notifications. See [docs/runtime-protocol.md](docs/runtime-protocol.md) for the protocol reference and [docs/runtime-dev-recipe.md](docs/runtime-dev-recipe.md) for the practical development loop.
