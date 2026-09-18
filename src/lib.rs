@@ -1,5 +1,6 @@
 pub mod catalog;
 pub mod cli;
+pub mod contract;
 pub mod error;
 pub mod learn;
 pub mod manifest;

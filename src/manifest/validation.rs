@@ -71,6 +71,18 @@ impl ManifestValidator {
             (path.to_path_buf(), root_dir)
         };
 
+        // Distinguishes "this provider has no manifest" from "this manifest is
+        // broken"; the raw I/O error reads as a generic file-not-found.
+        if !manifest_path.exists() {
+            return ManifestValidationReport::invalid(
+                manifest_path.clone(),
+                vec![ValidationIssue {
+                    field: MANIFEST_FILENAME.to_string(),
+                    message: format!("not found in {}", root_dir.display()),
+                }],
+            );
+        }
+
         match self.parser.parse_path(&manifest_path) {
             Ok(manifest) => {
                 let issues = validate_manifest(&manifest, root_dir);

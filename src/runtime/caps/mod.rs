@@ -47,7 +47,17 @@ impl RuntimeSession {
         Ok(serde_json::from_str(response.trim())?)
     }
 
+    pub fn child_id(&self) -> Option<u32> {
+        self.child.as_ref().map(Child::id)
+    }
+
     pub fn shutdown(mut self, manifest: &CapabilityManifest, root: &Path) -> Result<()> {
+        let command_result = self.run_shutdown_command(manifest, root);
+        self.reap_child();
+        command_result
+    }
+
+    fn run_shutdown_command(&self, manifest: &CapabilityManifest, root: &Path) -> Result<()> {
         if let Some(command) = manifest.runtime.shutdown.as_deref() {
             let status = Command::new("sh")
                 .arg("-lc")
@@ -62,12 +72,22 @@ impl RuntimeSession {
             }
         }
 
+        Ok(())
+    }
+
+    fn reap_child(&mut self) {
+        self.stdin.take();
+        self.stdout.take();
         if let Some(mut child) = self.child.take() {
             let _ = child.kill();
             let _ = child.wait();
         }
+    }
+}
 
-        Ok(())
+impl Drop for RuntimeSession {
+    fn drop(&mut self) {
+        self.reap_child();
     }
 }
 

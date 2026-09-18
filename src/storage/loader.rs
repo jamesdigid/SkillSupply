@@ -16,7 +16,9 @@ impl FilesystemCapabilityLoader {
 
     pub fn load(&self, capability_root: &Path) -> Result<FilesystemCapability> {
         if !capability_root.is_dir() {
-            return Err(SkillSupportError::MissingManifest(capability_root.to_path_buf()));
+            return Err(SkillSupportError::MissingManifest(
+                capability_root.to_path_buf(),
+            ));
         }
 
         let report = self.validator.validate_path(capability_root);

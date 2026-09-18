@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Result, SkillSupportError};
 use crate::manifest::models::{CapabilityManifest, TestSuitePaths};
-use crate::runtime::RuntimeSession;
+use crate::runtime::capabilities::RuntimeSession;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

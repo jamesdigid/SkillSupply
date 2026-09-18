@@ -13,13 +13,15 @@ pub struct RuntimeConfig {
     pub host: String,
     pub port: u16,
     pub forward_timeout_ms: u64,
+    pub reaper_tick_ms: u64,
+    pub session_ttl_ms: u64,
 }
 
 impl RuntimeConfig {
     pub fn load(path: &Path) -> Result<Self> {
         let source = fs::read_to_string(path)?;
-        let file: RuntimeConfigFile =
-            toml::from_str(&source).map_err(|error| SkillSupportError::Config(error.to_string()))?;
+        let file: RuntimeConfigFile = toml::from_str(&source)
+            .map_err(|error| SkillSupportError::Config(error.to_string()))?;
         Ok(file.runtime.unwrap_or_default())
     }
 
@@ -35,6 +37,14 @@ impl RuntimeConfig {
 
     pub fn forward_timeout(&self) -> Duration {
         Duration::from_millis(self.forward_timeout_ms)
+    }
+
+    pub fn reaper_tick(&self) -> Duration {
+        Duration::from_millis(self.reaper_tick_ms)
+    }
+
+    pub fn session_ttl(&self) -> Duration {
+        Duration::from_millis(self.session_ttl_ms)
     }
 
     pub fn with_host(mut self, host: Option<String>) -> Self {
@@ -59,6 +69,8 @@ impl Default for RuntimeConfig {
             host: "127.0.0.1".to_string(),
             port: 8787,
             forward_timeout_ms: 30_000,
+            reaper_tick_ms: 50,
+            session_ttl_ms: 300_000,
         }
     }
 }
@@ -91,6 +103,10 @@ impl<'de> Deserialize<'de> for RuntimeConfig {
             port: u16,
             #[serde(default = "default_forward_timeout_ms")]
             forward_timeout_ms: u64,
+            #[serde(default = "default_reaper_tick_ms")]
+            reaper_tick_ms: u64,
+            #[serde(default = "default_session_ttl_ms")]
+            session_ttl_ms: u64,
         }
 
         let raw = RawRuntimeConfig::deserialize(deserializer)?;
@@ -99,6 +115,8 @@ impl<'de> Deserialize<'de> for RuntimeConfig {
             host: raw.host,
             port: raw.port,
             forward_timeout_ms: raw.forward_timeout_ms,
+            reaper_tick_ms: raw.reaper_tick_ms,
+            session_ttl_ms: raw.session_ttl_ms,
         })
     }
 }
@@ -119,6 +137,14 @@ fn default_forward_timeout_ms() -> u64 {
     30_000
 }
 
+fn default_reaper_tick_ms() -> u64 {
+    50
+}
+
+fn default_session_ttl_ms() -> u64 {
+    300_000
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,6 +157,8 @@ mod tests {
         assert_eq!(config.host, "127.0.0.1");
         assert_eq!(config.port, 8787);
         assert_eq!(config.forward_timeout_ms, 30_000);
+        assert_eq!(config.reaper_tick_ms, 50);
+        assert_eq!(config.session_ttl_ms, 300_000);
     }
 
     #[test]
@@ -140,6 +168,8 @@ mod tests {
             [runtime]
             port = 9000
             forward_timeout_ms = 50
+            reaper_tick_ms = 5
+            session_ttl_ms = 100
             "#,
         )
         .expect("config should deserialize");
@@ -149,5 +179,7 @@ mod tests {
         assert_eq!(config.host, "127.0.0.1");
         assert_eq!(config.port, 9000);
         assert_eq!(config.forward_timeout_ms, 50);
+        assert_eq!(config.reaper_tick_ms, 5);
+        assert_eq!(config.session_ttl_ms, 100);
     }
 }

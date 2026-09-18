@@ -21,7 +21,7 @@ flowchart TD
   select --> acquire[Acquire provider]
   acquire --> init[Initialize runtime]
   init --> verify[Run verification tests]
-  verify --> ready[Record capability in skillsupport.yaml]
+  verify --> ready[Record capability in caps.yaml]
 ```
 
 ## Repository Layout

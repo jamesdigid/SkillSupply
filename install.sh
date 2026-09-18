@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/jamesdigid/SkillSupport/main/install.sh | sh
 #
 # Environment variables:
-#   SKILLSUPPORT_INSTALL_DIR   Where to install the binary (default: $HOME/.skillsupport/bin)
+#   SKILLSUPPORT_INSTALL_DIR   Where to install the binary (default: $HOME/.caps/bin)
 #   SKILLSUPPORT_VERSION       Release tag to install (default: latest)
 #   SKILLSUPPORT_FROM_SOURCE   Set to "1" to force building from source with cargo
 # Backward compatibility:
@@ -15,7 +15,7 @@ set -eu
 REPO="jamesdigid/SkillSupport"
 PACKAGE_NAME="skillsupport"
 BIN_NAME="caps"
-INSTALL_DIR="${SKILLSUPPORT_INSTALL_DIR:-${EPISTEM_INSTALL_DIR:-$HOME/.skillsupport/bin}}"
+INSTALL_DIR="${SKILLSUPPORT_INSTALL_DIR:-${EPISTEM_INSTALL_DIR:-$HOME/.caps/bin}}"
 VERSION="${SKILLSUPPORT_VERSION:-${EPISTEM_VERSION:-latest}}"
 
 # ---------------------------------------------------------------------------

@@ -15,7 +15,7 @@ caps init
 caps learn browser-attach
 ```
 
-`caps init` creates a workspace manifest (`skillsupport.yaml`) plus a `capabilities/` directory.
+`caps init` creates a workspace manifest (`caps.yaml`) plus a `caps/` directory where learned capabilities are installed.
 `caps learn` looks up a capability in the registry, resolves a provider, acquires it, initializes it, and runs verification tests before marking it installed.
 
 ## Provider Layout
@@ -55,6 +55,42 @@ cargo clippy
 ```
 
 Requires Rust 1.85+.
+
+### Local Release Build
+
+Build the optimized CLI binary and test it before publishing or installing:
+
+```bash
+cargo build --release
+./target/release/caps --help
+./target/release/caps init --help
+```
+
+To test the binary from the local SkillSupport bin directory:
+
+```bash
+mkdir -p "$HOME/.caps/bin"
+cp ./target/release/caps "$HOME/.caps/bin/caps"
+export PATH="$HOME/.caps/bin:$PATH"
+caps --help
+```
+
+Persist the `PATH` update for new shells:
+
+```bash
+echo 'export PATH="$HOME/.caps/bin:$PATH"' >> "$HOME/.zshrc"
+```
+
+To try the release binary from anywhere on your machine:
+
+```bash
+cargo install --path . --force
+caps --help
+```
+
+## Runtime Protocol
+
+External capabilities can connect to `caps dev` over WebSocket JSON-RPC, register their methods, and receive lifecycle notifications. See [docs/runtime-protocol.md](docs/runtime-protocol.md) for the protocol reference and [docs/runtime-dev-recipe.md](docs/runtime-dev-recipe.md) for the practical development loop.
 
 ## Roadmap
 
