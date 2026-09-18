@@ -2,7 +2,7 @@
 # SkillSupport installer
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/jamesdigid/SkillSupport/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/jamesdigid/SkillSupply/main/install.sh | sh
 #
 # Environment variables:
 #   SKILLSUPPORT_INSTALL_DIR   Where to install the binary (default: $HOME/.caps/bin)
@@ -12,7 +12,7 @@
 #   EPISTEM_INSTALL_DIR, EPISTEM_VERSION, and EPISTEM_FROM_SOURCE are still accepted.
 set -eu
 
-REPO="jamesdigid/SkillSupport"
+REPO="jamesdigid/SkillSupply"
 PACKAGE_NAME="skillsupport"
 BIN_NAME="caps"
 INSTALL_DIR="${SKILLSUPPORT_INSTALL_DIR:-${EPISTEM_INSTALL_DIR:-$HOME/.caps/bin}}"
@@ -177,7 +177,7 @@ install_from_source() {
 # ---------------------------------------------------------------------------
 # PATH setup
 # ---------------------------------------------------------------------------
-add_to_path_hint() {
+ensure_path() {
   case ":$PATH:" in
     *":$INSTALL_DIR:"*)
       return 0
@@ -205,8 +205,18 @@ add_to_path_hint() {
 
   printf '\n'
   warn "$INSTALL_DIR is not on your PATH."
-  printf '%s  Add it by running:%s\n\n' "$DIM" "$RESET"
-  printf "    echo %s'%s'%s >> %s\n" "$BOLD" "$export_line" "$RESET" "$profile"
+  mkdir -p "$(dirname "$profile")"
+
+  if [ ! -f "$profile" ] || ! grep -F "$export_line" "$profile" >/dev/null 2>&1; then
+    {
+      printf '\n'
+      printf '# SkillSupport caps CLI\n'
+      printf '%s\n' "$export_line"
+    } >> "$profile"
+    info "Added ${INSTALL_DIR} to ${profile}"
+  fi
+
+  printf '%s  Restart your shell, or run this for the current session:%s\n\n' "$DIM" "$RESET"
   printf '    %s\n\n' "$export_line"
 }
 
@@ -236,7 +246,7 @@ main() {
   version="$("$installed" --version 2>/dev/null || echo "$BIN_NAME")"
   info "Installed ${BOLD}${version}${RESET} to ${INSTALL_DIR}"
 
-  add_to_path_hint
+  ensure_path
 
   printf 'Get started:\n'
   printf '    %s%s learn browser-attach%s\n' "$BOLD" "$BIN_NAME" "$RESET"

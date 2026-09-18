@@ -7,7 +7,7 @@ It helps agents discover, acquire, initialize, and verify capabilities through i
 ## Quick Start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jamesdigid/SkillSupport/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/jamesdigid/SkillSupply/main/install.sh | sh
 ```
 
 ```bash
